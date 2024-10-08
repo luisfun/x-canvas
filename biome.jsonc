@@ -16,11 +16,8 @@
   "linter": {
     "rules": {
       "recommended": true,
-      "style": {
-        "noParameterAssign": "off" // To reuse the arguments
-      },
       "suspicious": {
-        "noExplicitAny": "off" // Allow type any
+        "noExplicitAny": "warn" // Allow type any
       }
     }
   },

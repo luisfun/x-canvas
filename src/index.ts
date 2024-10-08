@@ -1,2 +1,2 @@
-//export * from './x-canvas'
-//export * from './element'
+export * from './x-canvas'
+export * from './element'
