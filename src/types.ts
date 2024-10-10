@@ -1,4 +1,12 @@
-type NodeName = 'div' | 'img'
+export type Options = {
+  canvasWidth?: number
+  canvasHeight?: number
+  fontFace?: FontFace
+  //fontFamily?: string
+  fontSize?: number
+  fontColor?: string
+  renderDelay?: number
+}
 
 type SxSize = number | (string & {}) | 'auto'
 type SxBorder = { width: number; color: string; offset?: number }
@@ -36,19 +44,21 @@ export type DivProps = Props & {
   textAlign?: 'left' | 'right' | 'center'
 }
 export type ImgProps = Props & {
+  src: string
   objectFit?: 'contain' | 'cover' // imgタグ と bgImage要素
 }
-//export type Props = DivProps | ImgProps
 
-export type XElement =
-  | {
-      type: NodeName
-      props: DivProps | ImgProps
-      children: XElement[]
-    }
-  | string
-  | number
-  | undefined
+export type DivElement = {
+  type: 'div'
+  props: DivProps
+  children: XElement[]
+}
+export type ImgElement = {
+  type: 'img'
+  props: ImgProps
+  children: []
+}
+export type XElement = DivElement | ImgElement | string | number | undefined
 
 export type Position = {
   x: number

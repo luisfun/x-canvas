@@ -1,4 +1,4 @@
-import type { DivProps, ImgProps, XElement } from './types'
+import type { DivElement, DivProps, ImgElement, ImgProps, XElement } from './types'
 
-export const div = (props: DivProps, ...children: XElement[]): XElement => ({ type: 'div', props, children })
-export const img = (props: ImgProps): XElement => ({ type: 'img', props, children: [] })
+export const div = (props: DivProps, ...children: XElement[]): DivElement => ({ type: 'div', props, children })
+export const img = (props: ImgProps): ImgElement => ({ type: 'img', props, children: [] })
