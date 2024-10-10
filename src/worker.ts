@@ -1,5 +1,5 @@
-import type { DivElement, DivProps, Options, Position, Structure, XElement } from './types'
-
+import type { DivElement, Options, Position, Structure, XElement } from './types'
+// @ts-expect-error
 const loadImage = (url: string) =>
   fetch(url)
     .then(res => res.blob())
@@ -66,34 +66,42 @@ class XCanvas {
   #canvas: OffscreenCanvas
   // @ts-expect-error
   #ctx: OffscreenCanvasRenderingContext2D
-  // @ts-expect-error
   #fontFace: FontFace | undefined
+  // @ts-expect-error
   #fontFamily: string
+  // @ts-expect-error
   #fontSize: number
   // @ts-expect-error
   #fontColor: string
-  #renderDelay: number | undefined
+  //#renderDelay: number | undefined
   #structure: Structure | undefined = undefined
+  #isFontLoad = true
   constructor(canvas: OffscreenCanvas, ctx: OffscreenCanvasRenderingContext2D, options?: Options) {
     this.#canvas = canvas
     this.#ctx = ctx
     if (options?.canvasWidth) this.#canvas.width = options.canvasWidth
     if (options?.canvasHeight) this.#canvas.height = options.canvasHeight
     this.#fontFace = options?.fontFace
+    // @ts-expect-error
+    if (options?.fontFace) self.fonts.add(options?.fontFace)
     this.#fontFamily = options?.fontFace?.family || 'sans-serif'
     this.#fontSize = options?.fontSize || 16
     this.#fontColor = options?.fontColor || '#000000'
-    this.#renderDelay = options?.renderDelay
+    //this.#renderDelay = options?.renderDelay
+    if (options?.fontFace) this.#isFontLoad = false
   }
 
   options = (options: Options | undefined) => {
     if (options?.canvasWidth) this.#canvas.width = options.canvasWidth
     if (options?.canvasHeight) this.#canvas.height = options.canvasHeight
     this.#fontFace = options?.fontFace
+    // @ts-expect-error
+    if (options?.fontFace) self.fonts.add(options?.fontFace)
     this.#fontFamily = options?.fontFace?.family || 'sans-serif'
     this.#fontSize = options?.fontSize || 16
     this.#fontColor = options?.fontColor || '#000000'
-    this.#renderDelay = options?.renderDelay
+    //this.#renderDelay = options?.renderDelay
+    if (options?.fontFace) this.#isFontLoad = false
   }
 
   render(root: DivElement) {
@@ -102,34 +110,35 @@ class XCanvas {
     const inner = recuStructure(pos, root)
     this.#structure = { pos, elem: root, inner }
     // Canvas Rendering
-    const renderFunc = () => {
-      if (!this.#renderDelay) this.#imageLoader()
-      else setTimeout(() => this.#imageLoader(), typeof this.#renderDelay === 'number' ? this.#renderDelay : 0)
-      fonts.load(`${this.#fontSize}px ${this.#fontFamily}`).then(() => this.#draw())
-    }
-    if (!this.#renderDelay) renderFunc()
-    else setTimeout(() => renderFunc(), typeof this.#renderDelay === 'number' ? this.#renderDelay : 0)
+    this.#loadAndDraw()
+    // fontLoadAndDraw
+    if (!this.#isFontLoad)
+      this.#fontFace?.load().then(() => {
+        this.#draw('force')
+        this.#isFontLoad = true
+      })
   }
 
-  #imageLoader(structure?: Structure, recursive?: boolean) {
+  #loadAndDraw(structure?: Structure, recursive?: boolean) {
     const s = recursive ? structure : this.#structure
     if (!s) return
     if (typeof s.elem !== 'object' || !s.elem) return
-    if (s.elem.type === 'img') this.#imageLoad(s.elem.props.src)
-    if (s.elem.props.backgroundImage) this.#imageLoad(s.elem.props.backgroundImage)
-    //if (s.elem.type === 'canvas' && s.elem.props.canvasFunc)
-    //  this.#innerCanvasLoad(s.elem.props.canvasId || 'canvas', s.elem.props.canvasFunc, s.pos)
-    for (const e of s.inner || []) this.#imageLoader(e, true)
+    if (s.elem.type === 'img') this.#imageLoadAndDraw(s.elem.props.src)
+    if (s.elem.props.backgroundImage) this.#imageLoadAndDraw(s.elem.props.backgroundImage)
+    if (s.elem.type === 'canvas') this.#canvasLoadAndDraw(s.elem.props.id || 'canvas', s.elem.props.func, s.pos)
+    for (const e of s.inner || []) this.#loadAndDraw(e, true)
   }
 
-  #draw() {}
-
-  #imageLoad(e: any) {}
+  // @ts-expect-error
+  #imageLoadAndDraw(e: any) {}
+  // @ts-expect-error
+  #canvasLoadAndDraw(e: any, f: any, a: any) {}
+  // @ts-expect-error
+  #draw(type?: 'force') {}
 }
 
 let xc: XCanvas | undefined
-// biome-ignore lint: onmessage
-onmessage = (event: MessageEvent<{ canvas: OffscreenCanvas; options: Options | undefined; root: DivElement }>) => {
+self.onmessage = (event: MessageEvent<{ canvas: OffscreenCanvas; options: Options | undefined; root: DivElement }>) => {
   const { canvas, options, root } = event.data
   if (!xc) {
     const ctx = canvas.getContext('2d')

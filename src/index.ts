@@ -1,4 +1,4 @@
-import type { DivElement, DivProps, ImgElement, ImgProps, Options, XElement } from './types'
+import type { CanvasElement, CanvasProps, DivElement, DivProps, ImgElement, ImgProps, Options, XElement } from './types'
 
 export class XCanvas {
   #worker: Worker
@@ -63,6 +63,11 @@ export const div = (props: DivProps, ...children: XElement[]): DivElement => ({ 
  * @returns {ImgElement}
  */
 export const img = (props: ImgProps): ImgElement => ({ type: 'img', props, children: [] })
+/**
+ * @param {CanvasProps} props
+ * @returns {CanvasElement}
+ */
+export const canvas = (props: CanvasProps): CanvasElement => ({ type: 'canvas', props, children: [] })
 
 /**
  * Save image or Open in a new tab

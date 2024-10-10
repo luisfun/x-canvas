@@ -5,7 +5,7 @@ export type Options = {
   //fontFamily?: string
   fontSize?: number
   fontColor?: string
-  renderDelay?: number
+  //renderDelay?: number
 }
 
 type SxSize = number | (string & {}) | 'auto'
@@ -47,6 +47,10 @@ export type ImgProps = Props & {
   src: string
   objectFit?: 'contain' | 'cover' // imgタグ と bgImage要素
 }
+export type CanvasProps = Props & {
+  func: (ctx: OffscreenCanvasRenderingContext2D) => Promise<void>
+  id?: string
+}
 
 export type DivElement = {
   type: 'div'
@@ -58,7 +62,12 @@ export type ImgElement = {
   props: ImgProps
   children: []
 }
-export type XElement = DivElement | ImgElement | string | number | undefined
+export type CanvasElement = {
+  type: 'canvas'
+  props: CanvasProps
+  children: []
+}
+export type XElement = DivElement | ImgElement | CanvasElement | string | number | undefined
 
 export type Position = {
   x: number
