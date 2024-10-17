@@ -1,6 +1,6 @@
-import type { DivElement, Options, Position, Structure, XElement } from './types'
-// @ts-expect-error
-const loadImage = (url: string) =>
+import type { DivElement, Options, Position, Structure, XElement, DivProps } from './types'
+
+const fetchImage = (url: string) =>
   fetch(url)
     .then(res => res.blob())
     .then(blob => createImageBitmap(blob))
@@ -64,18 +64,16 @@ const calcPos = (outer: CalcOuter, innerArr: CalcInner[], direction?: `column` |
 
 class XCanvas {
   #canvas: OffscreenCanvas
-  // @ts-expect-error
   #ctx: OffscreenCanvasRenderingContext2D
   #fontFace: FontFace | undefined
-  // @ts-expect-error
   #fontFamily: string
-  // @ts-expect-error
   #fontSize: number
-  // @ts-expect-error
   #fontColor: string
   //#renderDelay: number | undefined
   #structure: Structure | undefined = undefined
   #isFontLoad = true
+  #imageMap = new Map<string, ImageBitmap>()
+  #imageSrcList: string[] = [] // 重複回避用
   constructor(canvas: OffscreenCanvas, ctx: OffscreenCanvasRenderingContext2D, options?: Options) {
     this.#canvas = canvas
     this.#ctx = ctx
@@ -114,7 +112,7 @@ class XCanvas {
     // fontLoadAndDraw
     if (!this.#isFontLoad)
       this.#fontFace?.load().then(() => {
-        this.#draw('force')
+        this.#draw(this.#structure)
         this.#isFontLoad = true
       })
   }
@@ -123,18 +121,88 @@ class XCanvas {
     const s = recursive ? structure : this.#structure
     if (!s) return
     if (typeof s.elem !== 'object' || !s.elem) return
-    if (s.elem.type === 'img') this.#imageLoadAndDraw(s.elem.props.src)
-    if (s.elem.props.backgroundImage) this.#imageLoadAndDraw(s.elem.props.backgroundImage)
-    if (s.elem.type === 'canvas') this.#canvasLoadAndDraw(s.elem.props.id || 'canvas', s.elem.props.func, s.pos)
+    if (s.elem.type === 'img') this.#loadImageAndDraw(s.elem.props.src)
+    if (s.elem.props.backgroundImage) this.#loadImageAndDraw(s.elem.props.backgroundImage)
+    if (s.elem.type === 'canvas') this.#loadCanvasAndDraw(s.elem.props.id || 'canvas', s.elem.props.func, s.pos)
     for (const e of s.inner || []) this.#loadAndDraw(e, true)
   }
 
-  // @ts-expect-error
-  #imageLoadAndDraw(e: any) {}
-  // @ts-expect-error
-  #canvasLoadAndDraw(e: any, f: any, a: any) {}
-  // @ts-expect-error
-  #draw(type?: 'force') {}
+  #loadImageAndDraw(src: string) {
+    if (this.#imageSrcList.includes(src)) return
+    this.#imageSrcList.push(src)
+    fetchImage(src).then(image => {
+      this.#imageMap.set(src, image)
+      this.#draw()
+    })
+  }
+
+  #loadCanvasAndDraw(id: string, func: (ctx: OffscreenCanvasRenderingContext2D) => Promise<void>, pos: Position, refresh = true) {
+    if (refresh) this.#imageMap.delete(id)
+    else if (this.#imageSrcList.includes(id)) return
+    if (!this.#imageSrcList.includes(id)) this.#imageSrcList.push(id)
+    const canvas = new OffscreenCanvas(Math.round(pos.w), Math.round(pos.h))
+    const ctx = canvas.getContext("2d")
+    if (!ctx) {
+      new Error('web worker: loadCanvasAndDraw OffscreenCanvas.getContext("2d")')
+      return
+    }
+    func(ctx).then(() => {
+      createImageBitmap(canvas).then(image => {
+        this.#imageMap.set(id, image)
+        this.#draw()
+      })
+    })
+  }
+
+  #draw(structure?: Structure, recursive?: boolean) {
+    if(!structure && this.#imageSrcList.length !== this.#imageMap.keys.length) return
+    const s = recursive ? structure : this.#structure
+    if (!s) return
+    if (typeof s.elem !== 'object' || !s.elem) return
+    const h = s.elem.props?.overflow === 'hidden' ? { pos: s.pos, radius: s.elem.props.borderRadius } : undefined
+    if (h) this.ctxClip(h)
+    const clipPath = s.elem.props?.clipPathLine ? { pos: s.pos, path: s.elem.props.clipPathLine } : undefined
+    if (clipPath) this.ctxClipPath(clipPath)
+    if (s.elem.props) this.backgroundDraw(s.pos, s.elem.props)
+    if (s.elem.type === 'img') this.imageDraw(s.pos, s.elem.props?.src || '', s.elem.props)
+    if (s.elem.type === 'canvas') this.imageDraw(s.pos, s.elem.props?.id || 'canvas', s.elem.props)
+    if (s.elem.type === 'div') {
+      if (typeof s.elem.children[0] === 'string' || typeof s.elem.children[0] === 'number') {
+        this.#drawText(s.pos, s.elem.children[0], s.elem.props)
+      }
+    }
+    for (const e of s.inner || []) this.#draw(e, true)
+    if (clipPath) this.#ctx.restore()
+    if (h) this.#ctx.restore()
+  }
+
+  #drawText(pos: Position, text: string | number, props: DivProps) {
+    const size = !props?.fontSize
+      ? this.#fontSize
+      : typeof props.fontSize === 'number'
+        ? props.fontSize
+        : props.fontSize.slice(-3) === 'rem'
+          ? this.#fontSize * Number(props.fontSize.slice(0, -3))
+          : this.#fontSize // 実質エラー
+    const align = props?.textAlign || 'left'
+    const x = align === 'left' ? pos.x : align === 'right' ? pos.x + pos.w : pos.x + pos.w / 2
+    this.#ctx.fillStyle = props?.color || this.#fontColor
+    this.#ctx.font = `${size}px ${this.#fontFamily}`
+    this.#ctx.textAlign = align
+    this.#ctx.textBaseline = 'middle'
+    if (props?.opacity) this.#ctx.globalAlpha = props.opacity
+    if (props?.shadow) {
+      this.#ctx.shadowBlur = props.shadow.size
+      this.#ctx.shadowColor = props.shadow.color || '#000'
+      for (let i = 0; i < (props.shadow?.for || 1); i++) {
+        this.#ctx.fillText(text.toString(), x, pos.y + pos.h / 2)
+      }
+      this.#ctx.shadowBlur = 0
+    } else {
+      this.#ctx.fillText(text.toString(), x, pos.y + pos.h / 2)
+    }
+    if (props?.opacity) this.#ctx.globalAlpha = 1
+  }
 }
 
 let xc: XCanvas | undefined
