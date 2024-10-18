@@ -1,4 +1,15 @@
-import type { DivElement, Options, Position, Structure, XElement, DivProps } from './types'
+import type {
+  CanvasProps,
+  DivElement,
+  DivProps,
+  ImgProps,
+  Options,
+  Position,
+  Structure,
+  SxBorder,
+  SxSize,
+  XElement,
+} from './types'
 
 const fetchImage = (url: string) =>
   fetch(url)
@@ -62,6 +73,51 @@ const calcPos = (outer: CalcOuter, innerArr: CalcInner[], direction?: `column` |
   { x: 1, y: 1, w: 1, h: 1, z: 1 },
 ]
 
+const drawImageArea = (image: ImageBitmap | OffscreenCanvas, pos: Position, props: ImgProps | CanvasProps) => {
+  const w = image.width
+  const h = image.height
+  const posRatio = pos.w / pos.h
+  const imgRatio = w / h
+  let fit: 'x' | 'y' | undefined = undefined
+  if ('objectFit' in props && props.objectFit === 'cover') {
+    // 領域いっぱい（アスペクト比を維持）
+    if (posRatio < imgRatio) fit = 'y'
+    if (imgRatio < posRatio) fit = 'x'
+  } else {
+    // 領域内（アスペクト比を維持）
+    if (posRatio < imgRatio) fit = 'x'
+    if (imgRatio < posRatio) fit = 'y'
+  }
+  if (fit === 'x') {
+    const img = { w: pos.w, h: (h * pos.w) / w }
+    const posY = pos.y + pos.h / 2 - img.h / 2
+    return [0, 0, w, h, pos.x, posY, img.w, img.h] as const
+  }
+  const img = { w: (w * pos.h) / h, h: pos.h }
+  const posX = pos.x + pos.w / 2 - img.w / 2
+  return [0, 0, w, h, posX, pos.y, img.w, img.h] as const
+}
+
+const num2num = (num: unknown) => (typeof num === 'number' ? num : undefined)
+const per2num = (per: unknown) =>
+  typeof per === 'string' && per.at(-1) === '%' ? Number(per.slice(0, -1)) / 100 : undefined
+
+/*
+ * render
+ * ├ recuStructure ↻
+ * │
+ * ├ #load ↻
+ * │ ├ #loadImage
+ * │ │ └ #draw
+ * │ └ #loadCanvas
+ * │   └ #draw
+ * └ #draw
+ * #draw ↻
+ * ├ #drawBackground
+ * │ └ #drawImage
+ * ├ #drawImage
+ * └ #drawText
+ */
 class XCanvas {
   #canvas: OffscreenCanvas
   #ctx: OffscreenCanvasRenderingContext2D
@@ -69,10 +125,11 @@ class XCanvas {
   #fontFamily: string
   #fontSize: number
   #fontColor: string
+  #renderingLog: boolean | undefined
   //#renderDelay: number | undefined
   #structure: Structure | undefined = undefined
   #isFontLoad = true
-  #imageMap = new Map<string, ImageBitmap>()
+  #imageMap = new Map<string, ImageBitmap | OffscreenCanvas>()
   #imageSrcList: string[] = [] // 重複回避用
   constructor(canvas: OffscreenCanvas, ctx: OffscreenCanvasRenderingContext2D, options?: Options) {
     this.#canvas = canvas
@@ -85,6 +142,7 @@ class XCanvas {
     this.#fontFamily = options?.fontFace?.family || 'sans-serif'
     this.#fontSize = options?.fontSize || 16
     this.#fontColor = options?.fontColor || '#000000'
+    this.#renderingLog = options?.renderingLog
     //this.#renderDelay = options?.renderDelay
     if (options?.fontFace) this.#isFontLoad = false
   }
@@ -98,6 +156,7 @@ class XCanvas {
     this.#fontFamily = options?.fontFace?.family || 'sans-serif'
     this.#fontSize = options?.fontSize || 16
     this.#fontColor = options?.fontColor || '#000000'
+    this.#renderingLog = options?.renderingLog
     //this.#renderDelay = options?.renderDelay
     if (options?.fontFace) this.#isFontLoad = false
   }
@@ -108,26 +167,27 @@ class XCanvas {
     const inner = recuStructure(pos, root)
     this.#structure = { pos, elem: root, inner }
     // Canvas Rendering
-    this.#loadAndDraw()
-    // fontLoadAndDraw
+    this.#load()
+    // load font
     if (!this.#isFontLoad)
       this.#fontFace?.load().then(() => {
-        this.#draw(this.#structure)
+        this.#draw()
         this.#isFontLoad = true
       })
   }
 
-  #loadAndDraw(structure?: Structure, recursive?: boolean) {
+  #load(structure?: Structure, recursive?: boolean) {
     const s = recursive ? structure : this.#structure
     if (!s) return
     if (typeof s.elem !== 'object' || !s.elem) return
-    if (s.elem.type === 'img') this.#loadImageAndDraw(s.elem.props.src)
-    if (s.elem.props.backgroundImage) this.#loadImageAndDraw(s.elem.props.backgroundImage)
-    if (s.elem.type === 'canvas') this.#loadCanvasAndDraw(s.elem.props.id || 'canvas', s.elem.props.func, s.pos)
-    for (const e of s.inner || []) this.#loadAndDraw(e, true)
+    if (s.elem.type === 'img') this.#loadImage(s.elem.props.src)
+    if (s.elem.props.backgroundImage) this.#loadImage(s.elem.props.backgroundImage)
+    if (s.elem.type === 'canvas')
+      this.#loadCanvas(s.elem.props.id || 'canvas', s.elem.props.func, s.pos, s.elem.props.refresh)
+    for (const e of s.inner || []) this.#load(e, true)
   }
 
-  #loadImageAndDraw(src: string) {
+  #loadImage(src: string) {
     if (this.#imageSrcList.includes(src)) return
     this.#imageSrcList.push(src)
     fetchImage(src).then(image => {
@@ -136,36 +196,35 @@ class XCanvas {
     })
   }
 
-  #loadCanvasAndDraw(id: string, func: (ctx: OffscreenCanvasRenderingContext2D) => Promise<void>, pos: Position, refresh = true) {
-    if (refresh) this.#imageMap.delete(id)
-    else if (this.#imageSrcList.includes(id)) return
+  #loadCanvas(id: string, func: (canvas: OffscreenCanvas) => Promise<void>, pos: Position, refresh = true) {
+    if (!refresh && this.#imageSrcList.includes(id)) return
     if (!this.#imageSrcList.includes(id)) this.#imageSrcList.push(id)
-    const canvas = new OffscreenCanvas(Math.round(pos.w), Math.round(pos.h))
-    const ctx = canvas.getContext("2d")
-    if (!ctx) {
-      new Error('web worker: loadCanvasAndDraw OffscreenCanvas.getContext("2d")')
-      return
+    let canvas = this.#imageMap.get(id)
+    if (canvas instanceof OffscreenCanvas) {
+      canvas.width = Math.round(pos.w)
+      canvas.height = Math.round(pos.h)
+    } else {
+      canvas = new OffscreenCanvas(Math.round(pos.w), Math.round(pos.h))
     }
-    func(ctx).then(() => {
-      createImageBitmap(canvas).then(image => {
-        this.#imageMap.set(id, image)
-        this.#draw()
-      })
+    func(canvas).then(() => {
+      this.#imageMap.set(id, canvas)
+      this.#draw()
     })
   }
 
   #draw(structure?: Structure, recursive?: boolean) {
-    if(!structure && this.#imageSrcList.length !== this.#imageMap.keys.length) return
+    if (!recursive && this.#renderingLog) console.log('canvas rendering')
+    if (!structure && this.#imageSrcList.length !== this.#imageMap.keys.length) return
     const s = recursive ? structure : this.#structure
     if (!s) return
     if (typeof s.elem !== 'object' || !s.elem) return
     const h = s.elem.props?.overflow === 'hidden' ? { pos: s.pos, radius: s.elem.props.borderRadius } : undefined
-    if (h) this.ctxClip(h)
+    if (h) this.#ctxClipBox(h.pos, h.radius)
     const clipPath = s.elem.props?.clipPathLine ? { pos: s.pos, path: s.elem.props.clipPathLine } : undefined
-    if (clipPath) this.ctxClipPath(clipPath)
-    if (s.elem.props) this.backgroundDraw(s.pos, s.elem.props)
-    if (s.elem.type === 'img') this.imageDraw(s.pos, s.elem.props?.src || '', s.elem.props)
-    if (s.elem.type === 'canvas') this.imageDraw(s.pos, s.elem.props?.id || 'canvas', s.elem.props)
+    if (clipPath) this.#ctxClipPath(clipPath.pos, clipPath.path)
+    if (s.elem.props) this.#drawBackground(s.pos, s.elem.props)
+    if (s.elem.type === 'img') this.#drawImage(s.pos, s.elem.props?.src || '', s.elem.props)
+    if (s.elem.type === 'canvas') this.#drawImage(s.pos, s.elem.props?.id || 'canvas', s.elem.props)
     if (s.elem.type === 'div') {
       if (typeof s.elem.children[0] === 'string' || typeof s.elem.children[0] === 'number') {
         this.#drawText(s.pos, s.elem.children[0], s.elem.props)
@@ -202,6 +261,111 @@ class XCanvas {
       this.#ctx.fillText(text.toString(), x, pos.y + pos.h / 2)
     }
     if (props?.opacity) this.#ctx.globalAlpha = 1
+  }
+
+  #drawImage(pos: Position, src: string, props: ImgProps | CanvasProps) {
+    const image = this.#imageMap.get(src)
+    if (!image) return // ts: not loading
+    if (props.opacity) this.#ctx.globalAlpha = props.opacity
+    if (props.shadow) {
+      this.#ctx.shadowBlur = props.shadow.size
+      this.#ctx.shadowColor = props.shadow.color || '#000'
+      for (let i = 0; i < (props.shadow?.for || 1); i++) {
+        this.#ctx.drawImage(image, ...drawImageArea(image, pos, props))
+      }
+      this.#ctx.shadowBlur = 0
+    } else {
+      this.#ctx.drawImage(image, ...drawImageArea(image, pos, props))
+    }
+    if (props.opacity) this.#ctx.globalAlpha = 1
+  }
+
+  #drawBackground(pos: Position, props: DivProps | ImgProps | CanvasProps) {
+    if (props.backgroundColor) {
+      this.#ctx.fillStyle = props.backgroundColor
+      this.#ctx.fillRect(pos.x, pos.y, pos.w, pos.h)
+    }
+    /*
+    if(sx.backgroundRadialGradient) {
+      const sxGrad = sx.backgroundRadialGradient
+      const sxLen = sxGrad.length - 1
+      if(sxLen===0) return
+      const cx = pos.x + pos.w/2, cy = pos.y + pos.h/2
+      const grad = this.ctx.createRadialGradient(cx, cy, 0, cx, cy, pos.w<pos.h?pos.w:pos.h)
+      sxGrad.forEach((color,i)=>{
+        grad.addColorStop(i/sxLen/2, color) // 2で割らないとなぜかオーバーシュートする
+      })
+      this.ctx.fillStyle = grad
+      this.ctx.fillRect(pos.x, pos.y, pos.w, pos.h)
+    }
+    */
+    if (props.backgroundBlendMode) this.#ctx.globalCompositeOperation = props.backgroundBlendMode
+    if (props.backgroundImage)
+      this.#drawImage(pos, props.backgroundImage, { objectFit: (props as ImgProps).objectFit } as ImgProps)
+    if (props.backgroundBlendMode) this.#ctx.globalCompositeOperation = 'source-over'
+    if (props.border) this.#drawBorder(pos, props.borderRadius, props.border)
+  }
+
+  #drawBorder(pos: Position, radius: SxSize | undefined, border: SxBorder | SxBorder[]) {
+    const borderArr = Array.isArray(border) ? border : [border]
+    const rad = num2num(radius) || (per2num(radius) || 0) * (pos.w < pos.h ? pos.w : pos.h)
+    for (const b of borderArr) {
+      const bo = b.offset || 0
+      const bw = b.width / 2
+      const p = {
+        x: pos.x + bo + bw,
+        y: pos.y + bo + bw,
+        w: pos.w - bo * 2 - bw * 2,
+        h: pos.h - bo * 2 - bw * 2,
+        z: pos.z,
+      }
+      const tmpRad = rad - bo - bw
+      const r = 0 < tmpRad ? tmpRad : 0
+      this.#ctx.lineWidth = b.width
+      this.#ctx.strokeStyle = b.color
+      this.#ctxPathBox(p, r)
+      this.#ctx.stroke()
+    }
+  }
+
+  #ctxPathBox(pos: Position, rad: number) {
+    this.#ctx.beginPath() // 左上から時計回り
+    this.#ctx.moveTo(pos.x + rad, pos.y)
+    this.#ctx.lineTo(pos.x + pos.w - rad, pos.y)
+    this.#ctx.arcTo(pos.x + pos.w, pos.y, pos.x + pos.w, pos.y + pos.h, rad)
+    this.#ctx.lineTo(pos.x + pos.w, pos.y + pos.h - rad)
+    this.#ctx.arcTo(pos.x + pos.w, pos.y + pos.h, pos.x, pos.y + pos.h, rad)
+    this.#ctx.lineTo(pos.x + rad, pos.y + pos.h)
+    this.#ctx.arcTo(pos.x, pos.y + pos.h, pos.x, pos.y, rad)
+    this.#ctx.lineTo(pos.x, pos.y + rad)
+    this.#ctx.arcTo(pos.x, pos.y, pos.x + pos.w, pos.y, rad)
+    this.#ctx.closePath()
+  }
+
+  #ctxClipBox(pos: Position, radius: SxSize | undefined) {
+    const rad = num2num(radius) || (per2num(radius) || 0) * (pos.w < pos.h ? pos.w : pos.h)
+    this.#ctx.save()
+    this.#ctxPathBox(pos, rad)
+    this.#ctx.clip()
+  }
+
+  #ctxClipPath(pos: Position, clipPath: SxSize[]) {
+    const fixPer = (p: SxSize, x: number, w: number) => {
+      if (typeof p === 'number') return x + p
+      const perNum = per2num(p)
+      if (perNum) return x + w * perNum
+      return x
+    }
+    const path = clipPath.map((p, i) => (i % 2 === 0 ? fixPer(p, pos.x, pos.w) : fixPer(p, pos.y, pos.h)))
+    this.#ctx.save()
+    this.#ctx.beginPath()
+    this.#ctx.moveTo(path[0], path[1])
+    for (let i = 2; i < path.length; i += 2) {
+      this.#ctx.lineTo(path[i], path[i + 1])
+    }
+    this.#ctx.lineTo(path[0], path[1])
+    this.#ctx.closePath()
+    this.#ctx.clip()
   }
 }
 

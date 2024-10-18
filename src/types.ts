@@ -6,10 +6,11 @@ export type Options = {
   fontSize?: number
   fontColor?: string
   //renderDelay?: number
+  renderingLog?: boolean
 }
 
-type SxSize = number | (string & {}) | 'auto'
-type SxBorder = { width: number; color: string; offset?: number }
+export type SxSize = number | (string & {}) | 'auto'
+export type SxBorder = { width: number; color: string; offset?: number }
 type Props = {
   display?: 'block' | 'flex'
   z?: number
@@ -48,8 +49,9 @@ export type ImgProps = Props & {
   objectFit?: 'contain' | 'cover' // imgタグ と bgImage要素
 }
 export type CanvasProps = Props & {
-  func: (ctx: OffscreenCanvasRenderingContext2D) => Promise<void>
+  func: (canvas: OffscreenCanvas) => Promise<void>
   id?: string
+  refresh?: boolean
 }
 
 export type DivElement = {
