@@ -4,6 +4,7 @@ export class XCanvas {
   #worker: Worker
   #canvas: OffscreenCanvas
   #options: Options | undefined
+  #postOptions = false
   /**
    * Initialization without using 'new'
    * @example
@@ -26,9 +27,10 @@ export class XCanvas {
     const blob = new Blob([code], { type: 'application/javascript' })
     const url = URL.createObjectURL(blob)
     const worker = new Worker(url, { type: 'module' })
-    worker.onmessage = (event: MessageEvent) => {
-      console.log('Result from worker:', event.data)
-    }
+    URL.revokeObjectURL(url)
+    //worker.onmessage = (event: MessageEvent) => {
+    //  console.log('Result from worker:', event.data)
+    //}
     return new XCanvas(worker, canvasElement, options)
   }
 
@@ -36,8 +38,9 @@ export class XCanvas {
    * Overwrite options set in init. If nothing is written, it is undefined and overwritten.
    * @param {Options} options
    */
-  options(options: Options) {
-    this.#options = options
+  options(options?: Options) {
+    this.#options = options ?? {}
+    this.#postOptions = false
   }
 
   /**
@@ -46,9 +49,14 @@ export class XCanvas {
    */
   render(props: DivProps, ...children: XElement[]) {
     this.#worker.postMessage(
-      { canvas: this.#canvas, options: this.#options, root: { type: 'div', props, children } as DivElement },
+      {
+        canvas: this.#canvas,
+        options: this.#postOptions ? undefined : this.#options,
+        root: { type: 'div', props, children } as DivElement,
+      },
       [this.#canvas],
     )
+    this.#postOptions = true
   }
 }
 

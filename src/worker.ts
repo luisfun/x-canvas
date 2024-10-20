@@ -11,8 +11,16 @@ import type {
   XElement,
 } from './types'
 
+const fixFontFaceConstructor = (
+  parameters: ConstructorParameters<typeof FontFace>,
+): ConstructorParameters<typeof FontFace> => {
+  let [family, source, descriptors] = parameters
+  if (typeof source === 'string' && !source.startsWith('url(')) source = `url(${self.location.origin + source})`
+  return [family, source, descriptors]
+}
+
 const fetchImage = (url: string) =>
-  fetch(url)
+  fetch(self.location.origin + url)
     .then(res => res.blob())
     .then(blob => createImageBitmap(blob))
 
@@ -70,7 +78,8 @@ type CalcInner = any /*{
 }*/
 // @ts-expect-error
 const calcPos = (outer: CalcOuter, innerArr: CalcInner[], direction?: `column` | `row`) => [
-  { x: 1, y: 1, w: 1, h: 1, z: 1 },
+  { x: 0, y: 0, w: 300, h: 150, z: 0 },
+  { x: 0, y: 0, w: 300, h: 150, z: 0 },
 ]
 
 const drawImageArea = (image: ImageBitmap | OffscreenCanvas, pos: Position, props: ImgProps | CanvasProps) => {
@@ -125,7 +134,7 @@ class XCanvas {
   #fontFamily: string
   #fontSize: number
   #fontColor: string
-  #renderingLog: boolean | undefined
+  #log: Options['log']
   //#renderDelay: number | undefined
   #structure: Structure | undefined = undefined
   #isFontLoad = true
@@ -136,13 +145,15 @@ class XCanvas {
     this.#ctx = ctx
     if (options?.canvasWidth) this.#canvas.width = options.canvasWidth
     if (options?.canvasHeight) this.#canvas.height = options.canvasHeight
-    this.#fontFace = options?.fontFace
-    // @ts-expect-error
-    if (options?.fontFace) self.fonts.add(options?.fontFace)
-    this.#fontFamily = options?.fontFace?.family || 'sans-serif'
+    if (options?.fontFace) {
+      this.#fontFace = new FontFace(...fixFontFaceConstructor(options.fontFace))
+      // @ts-expect-error
+      self.fonts.add(this.#fontFace)
+    }
+    this.#fontFamily = options?.fontFace?.[0] || 'sans-serif'
     this.#fontSize = options?.fontSize || 16
     this.#fontColor = options?.fontColor || '#000000'
-    this.#renderingLog = options?.renderingLog
+    this.#log = options?.log
     //this.#renderDelay = options?.renderDelay
     if (options?.fontFace) this.#isFontLoad = false
   }
@@ -150,24 +161,28 @@ class XCanvas {
   options = (options: Options | undefined) => {
     if (options?.canvasWidth) this.#canvas.width = options.canvasWidth
     if (options?.canvasHeight) this.#canvas.height = options.canvasHeight
-    this.#fontFace = options?.fontFace
-    // @ts-expect-error
-    if (options?.fontFace) self.fonts.add(options?.fontFace)
-    this.#fontFamily = options?.fontFace?.family || 'sans-serif'
+    if (options?.fontFace) {
+      this.#fontFace = new FontFace(...fixFontFaceConstructor(options.fontFace))
+      // @ts-expect-error
+      self.fonts.add(this.#fontFace)
+    }
+    this.#fontFamily = options?.fontFace?.[0] || 'sans-serif'
     this.#fontSize = options?.fontSize || 16
     this.#fontColor = options?.fontColor || '#000000'
-    this.#renderingLog = options?.renderingLog
+    this.#log = options?.log
     //this.#renderDelay = options?.renderDelay
     if (options?.fontFace) this.#isFontLoad = false
   }
 
   render(root: DivElement) {
-    // Analysis of structure
+    // analysis of structure
     const pos = { x: 0, y: 0, z: 0, w: this.#canvas.width, h: this.#canvas.height }
     const inner = recuStructure(pos, root)
     this.#structure = { pos, elem: root, inner }
-    // Canvas Rendering
+    // main rendering
     this.#load()
+    // non images
+    if (this.#imageSrcList.length === 0) this.#draw()
     // load font
     if (!this.#isFontLoad)
       this.#fontFace?.load().then(() => {
@@ -213,8 +228,8 @@ class XCanvas {
   }
 
   #draw(structure?: Structure, recursive?: boolean) {
-    if (!recursive && this.#renderingLog) console.log('canvas rendering')
-    if (!structure && this.#imageSrcList.length !== this.#imageMap.keys.length) return
+    if (!recursive && this.#log === 'render') console.log('OffscreenCanvas Rendering')
+    if (!structure && this.#imageSrcList.length !== this.#imageMap.size) return
     const s = recursive ? structure : this.#structure
     if (!s) return
     if (typeof s.elem !== 'object' || !s.elem) return
@@ -378,9 +393,8 @@ self.onmessage = (event: MessageEvent<{ canvas: OffscreenCanvas; options: Option
     else new Error('web worker: OffscreenCanvas.getContext("2d")')
   }
   if (xc) {
-    xc.options(options)
+    if (options) xc.options(options)
     xc.render(root)
   }
-  const result = (options?.fontSize || 0) * 2
-  postMessage(result)
+  //postMessage("render completed")
 }

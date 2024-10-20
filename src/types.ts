@@ -1,12 +1,12 @@
 export type Options = {
   canvasWidth?: number
   canvasHeight?: number
-  fontFace?: FontFace
+  fontFace?: ConstructorParameters<typeof FontFace>
   //fontFamily?: string
   fontSize?: number
   fontColor?: string
   //renderDelay?: number
-  renderingLog?: boolean
+  log?: 'render'
 }
 
 export type SxSize = number | (string & {}) | 'auto'
