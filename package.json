@@ -1,5 +1,5 @@
 {
-  "name": "x-canvas",
+  "name": "@luisfun/x-canvas",
   "version": "0.0.1",
   "description": "This module supports the coding of canvas drawing",
   "author": "Luis (https://github.com/luisfun)",
@@ -26,8 +26,8 @@
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.16.4",
-    "@biomejs/biome": "1.9.3",
+    "@biomejs/biome": "1.9.4",
     "tsup": "^8.3.0",
-    "typescript": "^5.6.2"
+    "typescript": "^5.6.3"
   }
 }
