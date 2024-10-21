@@ -81,7 +81,6 @@ class XCanvasWorker {
   #log: Options['log']
   //#renderDelay: number | undefined
   #structure: Structure | undefined = undefined
-  #isFontLoad = true
   #imageMap = new Map<string, ImageBitmap | OffscreenCanvas>()
   #imageSrcList: string[] = [] // 重複回避用
   constructor(canvas: OffscreenCanvas, ctx: OffscreenCanvasRenderingContext2D, options?: Options) {
@@ -99,7 +98,6 @@ class XCanvasWorker {
     this.#fontColor = options?.fontColor || '#000000'
     this.#log = options?.log
     //this.#renderDelay = options?.renderDelay
-    if (options?.fontFace) this.#isFontLoad = false
   }
 
   options = (options: Options | undefined) => {
@@ -115,7 +113,6 @@ class XCanvasWorker {
     this.#fontColor = options?.fontColor || '#000000'
     this.#log = options?.log
     //this.#renderDelay = options?.renderDelay
-    if (options?.fontFace) this.#isFontLoad = false
   }
 
   render(root: DivElement) {
@@ -125,17 +122,9 @@ class XCanvasWorker {
     this.#structure = { pos, elem: root, inner }
     // main rendering
     this.#load()
-    // non images
-    if (this.#imageSrcList.length === 0) this.#draw()
     // load font
-    if (!this.#isFontLoad)
-      this.#fontFace?.load().then(() => {
-        // @ts-expect-erro
-        //self.fonts.ready.then(() => {
-        this.#draw()
-        this.#isFontLoad = true
-        //})
-      })
+    // @ts-expect-error
+    self.fonts.ready.then(() => this.#draw())
   }
 
   /*
