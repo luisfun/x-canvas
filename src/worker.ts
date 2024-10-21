@@ -15,6 +15,8 @@ import type {
   XElement,
 } from './types'
 
+const defaultFont = 'Helvetica Neue, Arial, Hiragino Kaku Gothic ProN, Hiragino Sans, Meiryo, sans-serif'
+
 const fixFontFaceConstructor = (
   parameters: ConstructorParameters<typeof FontFace>,
 ): ConstructorParameters<typeof FontFace> => {
@@ -94,7 +96,7 @@ class XCanvasWorker {
       // @ts-expect-error
       self.fonts.add(this.#fontFace)
     }
-    this.#fontFamily = options?.fontFace?.[0] || 'sans-serif'
+    this.#fontFamily = options?.fontFace?.[0] ? `${options.fontFace[0]}, ${defaultFont}` : defaultFont
     this.#fontSize = options?.fontSize || 16
     this.#fontColor = options?.fontColor || '#000000'
     this.#debugMode = options?.debugMode
@@ -109,7 +111,7 @@ class XCanvasWorker {
       // @ts-expect-error
       self.fonts.add(this.#fontFace)
     }
-    this.#fontFamily = options?.fontFace?.[0] || 'sans-serif'
+    this.#fontFamily = options?.fontFace?.[0] ? `${options.fontFace[0]}, ${defaultFont}` : defaultFont
     this.#fontSize = options?.fontSize || 16
     this.#fontColor = options?.fontColor || '#000000'
     this.#debugMode = options?.debugMode
@@ -123,10 +125,9 @@ class XCanvasWorker {
     this.#structure = { pos, elem: root, inner }
     // rendering
     // @ts-expect-error
-    if (self.fonts.status === 'loaded') this.#draw()
+    if (self.fonts.check(`${this.#fontSize}px ${this.#fontFamily}`)) this.#draw()
     // load font
-    // @ts-expect-error
-    else self.fonts.ready.then(() => this.#draw())
+    else this.#fontFace?.load().then(() => this.#draw())
     // load image
     this.#load()
   }
@@ -334,7 +335,8 @@ class XCanvasWorker {
    */
 
   #draw(structure?: Structure, recursive?: boolean) {
-    if (!recursive && this.#debugMode) console.log('OffscreenCanvas Rendering')
+    // @ts-expect-error
+    if (!recursive && this.#debugMode) console.log(`Canvas Render${self.fonts.check(`${this.#fontSize}px ${this.#fontFamily}`) ? "" : ", Font Loading"}`)
     if (!structure && this.#imageSrcList.length !== this.#imageMap.size) return
     const s = recursive ? structure : this.#structure
     if (!s) return
