@@ -78,29 +78,17 @@ class XCanvasWorker {
   #canvas: OffscreenCanvas
   #ctx: OffscreenCanvasRenderingContext2D
   #fontFace: FontFace | undefined
-  #fontFamily: string
-  #fontSize: number
-  #fontColor: string
+  #fontFamily: string = defaultFont
+  #fontSize = 16
+  #fontColor = '#000'
   #debugMode: Options['debugMode']
   //#renderDelay: number | undefined
   #structure: Structure | undefined = undefined
   #imageMap = new Map<string, ImageBitmap | OffscreenCanvas>()
   #imageSrcList: string[] = [] // 重複回避用
-  constructor(canvas: OffscreenCanvas, ctx: OffscreenCanvasRenderingContext2D, options?: Options) {
+  constructor(canvas: OffscreenCanvas, ctx: OffscreenCanvasRenderingContext2D) {
     this.#canvas = canvas
     this.#ctx = ctx
-    if (options?.canvasWidth) this.#canvas.width = options.canvasWidth
-    if (options?.canvasHeight) this.#canvas.height = options.canvasHeight
-    if (options?.fontFace) {
-      this.#fontFace = new FontFace(...fixFontFaceConstructor(options.fontFace))
-      // @ts-expect-error
-      self.fonts.add(this.#fontFace)
-    }
-    this.#fontFamily = options?.fontFace?.[0] ? `${options.fontFace[0]}, ${defaultFont}` : defaultFont
-    this.#fontSize = options?.fontSize || 16
-    this.#fontColor = options?.fontColor || '#000000'
-    this.#debugMode = options?.debugMode
-    //this.#renderDelay = options?.renderDelay
   }
 
   options = (options: Options | undefined) => {
@@ -108,14 +96,14 @@ class XCanvasWorker {
     if (options?.canvasHeight) this.#canvas.height = options.canvasHeight
     if (options?.fontFace) {
       this.#fontFace = new FontFace(...fixFontFaceConstructor(options.fontFace))
+      this.#fontFamily = `${options.fontFace[0]}, ${defaultFont}`
       // @ts-expect-error
       self.fonts.add(this.#fontFace)
     }
-    this.#fontFamily = options?.fontFace?.[0] ? `${options.fontFace[0]}, ${defaultFont}` : defaultFont
-    this.#fontSize = options?.fontSize || 16
-    this.#fontColor = options?.fontColor || '#000000'
-    this.#debugMode = options?.debugMode
-    //this.#renderDelay = options?.renderDelay
+    if (options?.fontSize) this.#fontSize = options.fontSize
+    if (options?.fontColor) this.#fontColor = options.fontColor
+    if (options?.debugMode) this.#debugMode = options.debugMode
+    //if (options?.renderDelay) this.#renderDelay = options.renderDelay
   }
 
   render(root: DivElement) {
@@ -160,11 +148,14 @@ class XCanvasWorker {
       if (typeof child !== 'object')
         return { z: 0, w: 'auto', h: 'auto', mt: 'auto', mr: 'auto', mb: 'auto', ml: 'auto', position: undefined }
       const m = child.props?.m != null ? Number(child.props.m) : 'auto'
-      const textWidth = this.#getTextWidth(child.children[0])
       return {
         z: child.props?.z ?? 0,
-        w: textWidth ? textWidth : (child.props?.w ?? 'auto'),
-        h: textWidth ? this.#fixSize(child.props.fontSize, this.#fontSize, this.#fontSize) : (child.props?.h ?? 'auto'),
+        w: child.props?.w ?? this.#getTextWidth(child.children[0]) ?? 'auto',
+        h:
+          child.props?.h ??
+          (typeof child.children[0] === 'string' || typeof child.children[0] === 'number'
+            ? this.#fixSize(child.props.fontSize, this.#fontSize, this.#fontSize) * 1.5
+            : 'auto'),
         mt: child.props?.mt ?? m,
         mr: child.props?.mr ?? m,
         mb: child.props?.mb ?? m,
@@ -335,8 +326,7 @@ class XCanvasWorker {
    */
 
   #draw(structure?: Structure, recursive?: boolean) {
-    // @ts-expect-error
-    if (!recursive && this.#debugMode) console.log(`Canvas Render${self.fonts.check(`${this.#fontSize}px ${this.#fontFamily}`) ? "" : ", Font Loading"}`)
+    if (!recursive && this.#debugMode) console.log('Canvas Render')
     if (!structure && this.#imageSrcList.length !== this.#imageMap.size) return
     const s = recursive ? structure : this.#structure
     if (!s) return
@@ -511,7 +501,7 @@ self.onmessage = (event: MessageEvent<RequestWorker>) => {
   const { canvas, options, root } = event.data
   if (!xc) {
     const ctx = canvas.getContext('2d')
-    if (ctx) xc ??= new XCanvasWorker(canvas, ctx, options)
+    if (ctx) xc ??= new XCanvasWorker(canvas, ctx)
     else new Error('web worker: OffscreenCanvas.getContext("2d")')
   }
   if (xc) {
