@@ -109,13 +109,16 @@ class XCanvasWorker {
   render(root: DivElement) {
     // analysis of structure
     const pos = { x: 0, y: 0, z: 0, w: this.#canvas.width, h: this.#canvas.height }
-    const inner = this.#recuStructure(pos, root)
-    this.#structure = { pos, elem: root, inner }
-    // rendering
+    this.#structure = { pos, elem: root, inner: this.#recuStructure(pos, root) }
+    // quick render
     // @ts-expect-error
     if (self.fonts.check(`${this.#fontSize}px ${this.#fontFamily}`)) this.#draw()
     // load font
-    else this.#fontFace?.load().then(() => this.#draw())
+    else
+      this.#fontFace?.load().then(() => {
+        this.#structure = { pos, elem: root, inner: this.#recuStructure(pos, root) }
+        this.#draw()
+      })
     // load image
     this.#load()
   }
@@ -491,7 +494,9 @@ class XCanvasWorker {
 
   #getTextWidth(text: unknown, fontSize?: SxSize | undefined) {
     if (typeof text !== 'string' && typeof text !== 'number') return undefined
-    this.#ctx.font = `${this.#fixSize(fontSize, this.#fontSize, this.#fontSize)}px ${this.#fontFamily}`
+    // @ts-expect-error
+    const fontFamily = self.fonts.check(`${this.#fontSize}px ${this.#fontFamily}`) ? this.#fontFamily : defaultFont
+    this.#ctx.font = `${this.#fixSize(fontSize, this.#fontSize, this.#fontSize)}px ${fontFamily}`
     return this.#ctx.measureText(text.toString()).width
   }
 }
