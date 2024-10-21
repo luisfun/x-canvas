@@ -8,6 +8,7 @@ import type {
   ImgProps,
   Options,
   Position,
+  RequestWorker,
   Structure,
   SxBorder,
   SxSize,
@@ -78,7 +79,7 @@ class XCanvasWorker {
   #fontFamily: string
   #fontSize: number
   #fontColor: string
-  #log: Options['log']
+  #debugMode: Options['debugMode']
   //#renderDelay: number | undefined
   #structure: Structure | undefined = undefined
   #imageMap = new Map<string, ImageBitmap | OffscreenCanvas>()
@@ -96,7 +97,7 @@ class XCanvasWorker {
     this.#fontFamily = options?.fontFace?.[0] || 'sans-serif'
     this.#fontSize = options?.fontSize || 16
     this.#fontColor = options?.fontColor || '#000000'
-    this.#log = options?.log
+    this.#debugMode = options?.debugMode
     //this.#renderDelay = options?.renderDelay
   }
 
@@ -111,7 +112,7 @@ class XCanvasWorker {
     this.#fontFamily = options?.fontFace?.[0] || 'sans-serif'
     this.#fontSize = options?.fontSize || 16
     this.#fontColor = options?.fontColor || '#000000'
-    this.#log = options?.log
+    this.#debugMode = options?.debugMode
     //this.#renderDelay = options?.renderDelay
   }
 
@@ -120,11 +121,14 @@ class XCanvasWorker {
     const pos = { x: 0, y: 0, z: 0, w: this.#canvas.width, h: this.#canvas.height }
     const inner = this.#recuStructure(pos, root)
     this.#structure = { pos, elem: root, inner }
-    // main rendering
-    this.#load()
+    // rendering
+    // @ts-expect-error
+    if (self.fonts.status === 'loaded') this.#draw()
     // load font
     // @ts-expect-error
-    self.fonts.ready.then(() => this.#draw())
+    else self.fonts.ready.then(() => this.#draw())
+    // load image
+    this.#load()
   }
 
   /*
@@ -330,7 +334,7 @@ class XCanvasWorker {
    */
 
   #draw(structure?: Structure, recursive?: boolean) {
-    if (!recursive && this.#log === 'render') console.log('OffscreenCanvas Rendering')
+    if (!recursive && this.#debugMode) console.log('OffscreenCanvas Rendering')
     if (!structure && this.#imageSrcList.length !== this.#imageMap.size) return
     const s = recursive ? structure : this.#structure
     if (!s) return
@@ -501,7 +505,7 @@ class XCanvasWorker {
 }
 
 let xc: XCanvasWorker | undefined
-self.onmessage = (event: MessageEvent<{ canvas: OffscreenCanvas; options: Options | undefined; root: DivElement }>) => {
+self.onmessage = (event: MessageEvent<RequestWorker>) => {
   const { canvas, options, root } = event.data
   if (!xc) {
     const ctx = canvas.getContext('2d')

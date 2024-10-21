@@ -1,4 +1,14 @@
-import type { CanvasElement, CanvasProps, DivElement, DivProps, ImgElement, ImgProps, Options, XElement } from './types'
+import type {
+  CanvasElement,
+  CanvasProps,
+  DivElement,
+  DivProps,
+  ImgElement,
+  ImgProps,
+  Options,
+  RequestWorker,
+  XElement,
+} from './types'
 
 export class XCanvas {
   #worker: Worker
@@ -23,7 +33,9 @@ export class XCanvas {
    * @returns {XCanvas}
    */
   static async init(canvasElement: HTMLCanvasElement, options?: Options) {
-    const code = await fetch(new URL('./worker.js', import.meta.url)).then(res => res.text())
+    const code = await fetch(new URL(options?.debugMode ? './worker.js' : './worker.min.js', import.meta.url)).then(
+      res => res.text(),
+    )
     const blob = new Blob([code], { type: 'application/javascript' })
     const url = URL.createObjectURL(blob)
     const worker = new Worker(url, { type: 'module' })
@@ -53,7 +65,7 @@ export class XCanvas {
         canvas: this.#canvas,
         options: this.#isOptionsPosted ? undefined : this.#options,
         root: { type: 'div', props, children } as DivElement,
-      },
+      } as RequestWorker,
       [this.#canvas],
     )
     this.#isOptionsPosted = true
