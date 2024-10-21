@@ -4,7 +4,7 @@ export class XCanvas {
   #worker: Worker
   #canvas: OffscreenCanvas
   #options: Options | undefined
-  #postOptions = false
+  #isOptionsPosted = false
   /**
    * Initialization without using 'new'
    * @example
@@ -40,7 +40,7 @@ export class XCanvas {
    */
   options(options?: Options) {
     this.#options = options ?? {}
-    this.#postOptions = false
+    this.#isOptionsPosted = false
   }
 
   /**
@@ -51,12 +51,12 @@ export class XCanvas {
     this.#worker.postMessage(
       {
         canvas: this.#canvas,
-        options: this.#postOptions ? undefined : this.#options,
+        options: this.#isOptionsPosted ? undefined : this.#options,
         root: { type: 'div', props, children } as DivElement,
       },
       [this.#canvas],
     )
-    this.#postOptions = true
+    this.#isOptionsPosted = true
   }
 }
 

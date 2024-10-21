@@ -83,3 +83,7 @@ export type Structure = {
   elem: XElement
   inner: Structure[] | undefined
 }
+
+export type CalcOuter = Position & { pt: number; pr: number; pb: number; pl: number }
+export type CalcInner = Required<Pick<Props, 'z' | 'w' | 'h' | 'mt' | 'mr' | 'mb' | 'ml'>> & Pick<Props, 'position'>
+export type CalcUniInner = { len: SxSize; ms: SxSize; me: SxSize; pos: 'absolute' | undefined }

@@ -1,4 +1,7 @@
 import type {
+  CalcInner,
+  CalcOuter,
+  CalcUniInner,
   CanvasProps,
   DivElement,
   DivProps,
@@ -23,64 +26,6 @@ const fetchImage = (url: string) =>
   fetch(self.location.origin + url)
     .then(res => res.blob())
     .then(blob => createImageBitmap(blob))
-
-const recuStructure = (pos: Position, elem: XElement) => {
-  const posArr = calcChildrenPos(pos, elem)
-  if (typeof elem !== 'object' || !elem || !posArr) return undefined // end elem
-  const re: Structure[] = elem.children?.map((child, i) => ({
-    pos: posArr[i],
-    elem: child,
-    inner: undefined,
-  }))
-  for (const e of re) e.inner = recuStructure(e.pos, e.elem)
-  return re
-}
-
-const calcChildrenPos = (pos: Position, elem: XElement) => {
-  if (typeof elem !== 'object' || !elem) return undefined // end elem
-  const p = elem.props?.p ? Number(elem.props.p) : undefined
-  const pt = elem.props?.pt ?? p ?? 0
-  const pr = elem.props?.pr ?? p ?? 0
-  const pb = elem.props?.pb ?? p ?? 0
-  const pl = elem.props?.pl ?? p ?? 0
-  const sxArr = elem.children.map(child => {
-    if (typeof child !== 'object' || !child)
-      return { z: 0, w: 'auto', h: 'auto', mt: 'auto', mr: 'auto', mb: 'auto', ml: 'auto', pos: undefined } as const
-    const m = child.props?.m != null ? Number(child.props.m) : 'auto'
-    return {
-      z: child.props?.z ?? 0,
-      w: child.props?.w ?? 'auto',
-      h: child.props?.h ?? 'auto',
-      mt: child.props?.mt ?? m,
-      mr: child.props?.mr ?? m,
-      mb: child.props?.mb ?? m,
-      ml: child.props?.ml ?? m,
-      pos: child.props?.position,
-    }
-  })
-  if (elem.props?.display === 'flex')
-    // 横並び
-    return calcPos({ ...pos, pt, pr, pb, pl }, sxArr, 'row')
-  // 縦並び
-  return calcPos({ ...pos, pt, pr, pb, pl }, sxArr)
-}
-
-type CalcOuter = any //Position & { pt: number; pr: number; pb: number; pl: number }
-type CalcInner = any /*{
-  z: number
-  w: SxSize
-  h: SxSize
-  mt: MarginSize
-  mr: MarginSize
-  mb: MarginSize
-  ml: MarginSize
-  pos: 'absolute' | undefined
-}*/
-// @ts-expect-error
-const calcPos = (outer: CalcOuter, innerArr: CalcInner[], direction?: `column` | `row`) => [
-  { x: 0, y: 0, w: 300, h: 150, z: 0 },
-  { x: 0, y: 0, w: 300, h: 150, z: 0 },
-]
 
 const drawImageArea = (image: ImageBitmap | OffscreenCanvas, pos: Position, props: ImgProps | CanvasProps) => {
   const w = image.width
@@ -107,13 +52,12 @@ const drawImageArea = (image: ImageBitmap | OffscreenCanvas, pos: Position, prop
   return [0, 0, w, h, posX, pos.y, img.w, img.h] as const
 }
 
-const num2num = (num: unknown) => (typeof num === 'number' ? num : undefined)
 const per2num = (per: unknown) =>
   typeof per === 'string' && per.at(-1) === '%' ? Number(per.slice(0, -1)) / 100 : undefined
 
 /*
  * render
- * ├ recuStructure ↻
+ * ├ #recuStructure ↻
  * │
  * ├ #load ↻
  * │ ├ #loadImage
@@ -127,7 +71,7 @@ const per2num = (per: unknown) =>
  * ├ #drawImage
  * └ #drawText
  */
-class XCanvas {
+class XCanvasWorker {
   #canvas: OffscreenCanvas
   #ctx: OffscreenCanvasRenderingContext2D
   #fontFace: FontFace | undefined
@@ -177,7 +121,7 @@ class XCanvas {
   render(root: DivElement) {
     // analysis of structure
     const pos = { x: 0, y: 0, z: 0, w: this.#canvas.width, h: this.#canvas.height }
-    const inner = recuStructure(pos, root)
+    const inner = this.#recuStructure(pos, root)
     this.#structure = { pos, elem: root, inner }
     // main rendering
     this.#load()
@@ -186,10 +130,175 @@ class XCanvas {
     // load font
     if (!this.#isFontLoad)
       this.#fontFace?.load().then(() => {
+        // @ts-expect-erro
+        //self.fonts.ready.then(() => {
         this.#draw()
         this.#isFontLoad = true
+        //})
       })
   }
+
+  /*
+   * Analysis of Structure
+   */
+
+  #recuStructure(pos: Position, elem: XElement) {
+    const posArr = this.#calcChildrenPos(pos, elem)
+    if (typeof elem !== 'object' || !posArr) return undefined // end elem
+    const re: Structure[] = elem.children?.map((child, i) => ({
+      pos: posArr[i],
+      elem: child,
+      inner: undefined,
+    }))
+    for (const e of re) e.inner = this.#recuStructure(e.pos, e.elem)
+    return re
+  }
+
+  #calcChildrenPos(pos: Position, elem: XElement) {
+    if (typeof elem !== 'object') return undefined // end elem
+    const px = this.#fixSize(elem.props.p, pos.w, 0)
+    const py = this.#fixSize(elem.props.p, pos.h, 0)
+    const pt = this.#fixSize(elem.props.pt, pos.h, py)
+    const pr = this.#fixSize(elem.props.pr, pos.w, px)
+    const pb = this.#fixSize(elem.props.pb, pos.h, py)
+    const pl = this.#fixSize(elem.props.pl, pos.w, px)
+    const sxArr = elem.children.map(child => {
+      if (typeof child !== 'object')
+        return { z: 0, w: 'auto', h: 'auto', mt: 'auto', mr: 'auto', mb: 'auto', ml: 'auto', position: undefined }
+      const m = child.props?.m != null ? Number(child.props.m) : 'auto'
+      const textWidth = this.#getTextWidth(child.children[0])
+      return {
+        z: child.props?.z ?? 0,
+        w: textWidth ? textWidth : (child.props?.w ?? 'auto'),
+        h: textWidth ? this.#fixSize(child.props.fontSize, this.#fontSize, this.#fontSize) : (child.props?.h ?? 'auto'),
+        mt: child.props?.mt ?? m,
+        mr: child.props?.mr ?? m,
+        mb: child.props?.mb ?? m,
+        ml: child.props?.ml ?? m,
+        position: child.props?.position,
+      }
+    })
+    if (elem.props?.display === 'flex')
+      // 横並び
+      return this.#calcPos({ ...pos, pt, pr, pb, pl }, sxArr, 'row')
+    // 縦並び
+    return this.#calcPos({ ...pos, pt, pr, pb, pl }, sxArr)
+  }
+
+  #calcPos(outer: CalcOuter, innerArr: CalcInner[], direction?: `column` | `row`) {
+    const isRow = direction === 'row'
+    const x = outer.x + outer.pl
+    const y = outer.y + outer.pt
+    const w = outer.w - outer.pl - outer.pr
+    const h = outer.h - outer.pt - outer.pb
+    const xPos = this.#calcPosUni(
+      x,
+      w,
+      innerArr.map(e => ({ len: e.w, ms: e.ml, me: e.mr, pos: isRow ? e.position : 'absolute' })),
+    )
+    const yPos = this.#calcPosUni(
+      y,
+      h,
+      innerArr.map(e => ({ len: e.h, ms: e.mt, me: e.mb, pos: isRow ? 'absolute' : e.position })),
+    )
+    return innerArr.map((e, i) => ({
+      x: xPos[i].start,
+      y: yPos[i].start,
+      z: e.z,
+      w: xPos[i].len,
+      h: yPos[i].len,
+    }))
+  }
+
+  #calcPosUni(x: number, w: number, innerArr: CalcUniInner[]) {
+    let sumNum = 0
+    let sumPer = 0
+    for (const inner of innerArr) {
+      if (inner.pos === 'absolute') continue
+      for (const size of [inner.len, inner.ms, inner.me]) {
+        sumNum += this.#fixSize(size, undefined, 0)
+        sumPer += per2num(size) || 0
+      }
+    }
+    let tmp = x
+
+    // over
+    if (w < sumNum || (w === sumNum && 0 < sumPer)) {
+      return innerArr.map(inner => {
+        if (inner.pos === 'absolute') return this.#calcPosAbsolute(tmp, w, inner)
+        const { start, len, next } = this.#calcPosStatic(tmp, w, inner)
+        tmp = next
+        return { start, len }
+      })
+    }
+
+    // compress
+    const remainRate = (w - sumNum) / w
+    if (remainRate < sumPer) {
+      return innerArr.map(inner => {
+        if (inner.pos === 'absolute') return this.#calcPosAbsolute(tmp, w, inner)
+        const { start, len, next } = this.#calcPosStatic(tmp, (w * remainRate) / sumPer, inner)
+        tmp = next
+        return { start, len }
+      })
+    }
+
+    // keep
+    let lenAutoCount = 0
+    let mAutoCount = 0
+    for (const inner of innerArr) {
+      if (inner.pos === 'absolute') continue
+      if (inner.len === 'auto') lenAutoCount++
+      if (inner.ms === 'auto') mAutoCount++
+      if (inner.me === 'auto') mAutoCount++
+    }
+    return innerArr.map(inner => {
+      if (inner.pos === 'absolute') return this.#calcPosAbsolute(tmp, w, inner)
+      // len auto
+      if (lenAutoCount > 0) {
+        const { start, len, next } = this.#calcPosStatic(tmp, w, inner, (w - sumNum - sumPer * w) / lenAutoCount)
+        tmp = next
+        return { start, len }
+      }
+      // m auto
+      if (mAutoCount > 0) {
+        const { start, len, next } = this.#calcPosStatic(tmp, w, inner, w, (w - sumNum - sumPer * w) / mAutoCount)
+        tmp = next
+        return { start, len }
+      }
+      // non auto
+      const { start, len, next } = this.#calcPosStatic(tmp, w, inner)
+      tmp = next
+      return { start, len }
+    })
+  }
+
+  #calcPosStatic(x: number, w: number, inner: CalcUniInner, defaultW?: number, defaultM?: number) {
+    const len = this.#fixSize(inner.len, w, defaultW ?? w)
+    const ms = this.#fixSize(inner.ms, w, defaultM ?? 0)
+    const me = this.#fixSize(inner.me, w, defaultM ?? 0)
+    return { len, start: x + ms, next: x + len + ms + me }
+  }
+
+  #calcPosAbsolute(x: number, w: number, inner: CalcUniInner) {
+    if (inner.len === 'auto') {
+      const ms = this.#fixSize(inner.ms, w, 0)
+      const me = this.#fixSize(inner.me, w, 0)
+      const start = x + ms
+      const len = w - ms - me
+      return { start, len }
+    }
+    const len = this.#fixSize(inner.len, w, w)
+    const mAutoCount = (inner.ms === 'auto' ? 1 : 0) + (inner.me === 'auto' ? 1 : 0) // 0,1,2
+    const me = this.#fixSize(inner.me, w, 0)
+    const ms = this.#fixSize(inner.ms, w, (w - len - me) / mAutoCount)
+    const start = x + ms
+    return { start, len }
+  }
+
+  /*
+   * Load
+   */
 
   #load(structure?: Structure, recursive?: boolean) {
     const s = recursive ? structure : this.#structure
@@ -227,6 +336,10 @@ class XCanvas {
     })
   }
 
+  /*
+   * Draw
+   */
+
   #draw(structure?: Structure, recursive?: boolean) {
     if (!recursive && this.#log === 'render') console.log('OffscreenCanvas Rendering')
     if (!structure && this.#imageSrcList.length !== this.#imageMap.size) return
@@ -251,17 +364,10 @@ class XCanvas {
   }
 
   #drawText(pos: Position, text: string | number, props: DivProps) {
-    const size = !props?.fontSize
-      ? this.#fontSize
-      : typeof props.fontSize === 'number'
-        ? props.fontSize
-        : props.fontSize.slice(-3) === 'rem'
-          ? this.#fontSize * Number(props.fontSize.slice(0, -3))
-          : this.#fontSize // 実質エラー
     const align = props?.textAlign || 'left'
     const x = align === 'left' ? pos.x : align === 'right' ? pos.x + pos.w : pos.x + pos.w / 2
     this.#ctx.fillStyle = props?.color || this.#fontColor
-    this.#ctx.font = `${size}px ${this.#fontFamily}`
+    this.#ctx.font = `${this.#fixSize(props?.fontSize, this.#fontSize, this.#fontSize)}px ${this.#fontFamily}`
     this.#ctx.textAlign = align
     this.#ctx.textBaseline = 'middle'
     if (props?.opacity) this.#ctx.globalAlpha = props.opacity
@@ -323,7 +429,7 @@ class XCanvas {
 
   #drawBorder(pos: Position, radius: SxSize | undefined, border: SxBorder | SxBorder[]) {
     const borderArr = Array.isArray(border) ? border : [border]
-    const rad = num2num(radius) || (per2num(radius) || 0) * (pos.w < pos.h ? pos.w : pos.h)
+    const rad = this.#fixSize(radius, pos.w < pos.h ? pos.w : pos.h, 0)
     for (const b of borderArr) {
       const bo = b.offset || 0
       const bw = b.width / 2
@@ -358,20 +464,16 @@ class XCanvas {
   }
 
   #ctxClipBox(pos: Position, radius: SxSize | undefined) {
-    const rad = num2num(radius) || (per2num(radius) || 0) * (pos.w < pos.h ? pos.w : pos.h)
+    const rad = this.#fixSize(radius, pos.w < pos.h ? pos.w : pos.h, 0)
     this.#ctx.save()
     this.#ctxPathBox(pos, rad)
     this.#ctx.clip()
   }
 
   #ctxClipPath(pos: Position, clipPath: SxSize[]) {
-    const fixPer = (p: SxSize, x: number, w: number) => {
-      if (typeof p === 'number') return x + p
-      const perNum = per2num(p)
-      if (perNum) return x + w * perNum
-      return x
-    }
-    const path = clipPath.map((p, i) => (i % 2 === 0 ? fixPer(p, pos.x, pos.w) : fixPer(p, pos.y, pos.h)))
+    const path = clipPath.map((p, i) =>
+      i % 2 === 0 ? pos.x + this.#fixSize(p, pos.w, 0) : pos.y + this.#fixSize(p, pos.h, 0),
+    )
     this.#ctx.save()
     this.#ctx.beginPath()
     this.#ctx.moveTo(path[0], path[1])
@@ -382,14 +484,39 @@ class XCanvas {
     this.#ctx.closePath()
     this.#ctx.clip()
   }
+
+  /*
+   * Utils
+   */
+
+  #fixSize<T extends number | undefined>(size: SxSize | undefined, length?: number, defaultValue?: T) {
+    if (size !== undefined) {
+      if (typeof size === 'number') return size
+      if (size.endsWith('rem')) {
+        const sizeNum = Number(size.slice(0, -3))
+        if (!Number.isNaN(sizeNum)) return sizeNum * this.#fontSize
+      }
+      if (length && size.endsWith('%')) {
+        const sizeNum = Number(size.slice(0, -1))
+        if (!Number.isNaN(sizeNum)) return sizeNum * length
+      }
+    }
+    return defaultValue ?? ('auto' as T extends number ? number : number | 'auto')
+  }
+
+  #getTextWidth(text: unknown, fontSize?: SxSize | undefined) {
+    if (typeof text !== 'string' && typeof text !== 'number') return undefined
+    this.#ctx.font = `${this.#fixSize(fontSize, this.#fontSize, this.#fontSize)}px ${this.#fontFamily}`
+    return this.#ctx.measureText(text.toString()).width
+  }
 }
 
-let xc: XCanvas | undefined
+let xc: XCanvasWorker | undefined
 self.onmessage = (event: MessageEvent<{ canvas: OffscreenCanvas; options: Options | undefined; root: DivElement }>) => {
   const { canvas, options, root } = event.data
   if (!xc) {
     const ctx = canvas.getContext('2d')
-    if (ctx) xc ??= new XCanvas(canvas, ctx, options)
+    if (ctx) xc ??= new XCanvasWorker(canvas, ctx, options)
     else new Error('web worker: OffscreenCanvas.getContext("2d")')
   }
   if (xc) {
