@@ -32,14 +32,8 @@ export class XCanvas {
    * @param {Options} options
    * @returns {XCanvas}
    */
-  static async init(canvasElement: HTMLCanvasElement, options?: Options) {
-    const code = await fetch(new URL(options?.debugMode ? './worker.js' : './worker.min.js', import.meta.url)).then(
-      res => res.text(),
-    )
-    const blob = new Blob([code], { type: 'application/javascript' })
-    const url = URL.createObjectURL(blob)
-    const worker = new Worker(url, { type: 'module' })
-    URL.revokeObjectURL(url)
+  static async init(canvasElement: HTMLCanvasElement, workerDir: string, options?: Options) {
+    const worker = new Worker(`${workerDir}/x-canvas${options?.debugMode ? '' : '.min'}.js`)
     //worker.onmessage = (event: MessageEvent) => {
     //  console.log('Result from worker:', event.data)
     //}

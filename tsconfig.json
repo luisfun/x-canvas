@@ -5,6 +5,7 @@
     /* Modules */
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "lib": ["DOM", "WebWorker", "ESNext"],
     /* JavaScript Support */
     "checkJs": true,
     /* Emit */

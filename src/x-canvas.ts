@@ -111,7 +111,6 @@ class XCanvasWorker {
     const pos = { x: 0, y: 0, z: 0, w: this.#canvas.width, h: this.#canvas.height }
     this.#structure = { pos, elem: root, inner: this.#recuStructure(pos, root) }
     // quick render
-    // @ts-expect-error
     if (self.fonts.check(`${this.#fontSize}px ${this.#fontFamily}`)) this.#draw()
     // load font
     else
@@ -494,7 +493,6 @@ class XCanvasWorker {
 
   #getTextWidth(text: unknown, fontSize?: SxSize | undefined) {
     if (typeof text !== 'string' && typeof text !== 'number') return undefined
-    // @ts-expect-error
     const fontFamily = self.fonts.check(`${this.#fontSize}px ${this.#fontFamily}`) ? this.#fontFamily : defaultFont
     this.#ctx.font = `${this.#fixSize(fontSize, this.#fontSize, this.#fontSize)}px ${fontFamily}`
     return this.#ctx.measureText(text.toString()).width
