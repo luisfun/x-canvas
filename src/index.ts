@@ -16,28 +16,17 @@ export class XCanvas {
   #options: Options | undefined
   #isOptionsPosted = false
   /**
-   * Initialization without using 'new'
-   * @example
-   * ```ts
-   * const xc = await XCanvas.init(canvas)
-   * ```
-   */
-  constructor(worker: Worker, canvasElement: HTMLCanvasElement, options: Options | undefined) {
-    this.#worker = worker
-    this.#canvas = canvasElement.transferControlToOffscreen()
-    this.#options = options
-  }
-  /**
    * @param {HTMLCanvasElement} canvasElement
    * @param {Options} options
    * @returns {XCanvas}
    */
-  static async init(canvasElement: HTMLCanvasElement, workerDir: string, options?: Options) {
-    const worker = new Worker(`${workerDir}/x-canvas${options?.debugMode ? '' : '.min'}.js`)
+  constructor(canvasElement: HTMLCanvasElement, workerDir: string, options?: Options) {
+    this.#worker = new Worker(`${workerDir}/x-canvas${options?.debugMode ? '' : '.min'}.js`)
+    this.#canvas = canvasElement.transferControlToOffscreen()
+    this.#options = options
     //worker.onmessage = (event: MessageEvent) => {
     //  console.log('Result from worker:', event.data)
     //}
-    return new XCanvas(worker, canvasElement, options)
   }
 
   /**
