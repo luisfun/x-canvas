@@ -217,7 +217,7 @@ class XCanvasWorker {
     // over
     if (w < sumNum || (w === sumNum && 0 < sumPer)) {
       return innerArr.map(inner => {
-        if (inner.pos === 'absolute') return this.#calcPosAbsolute(tmp, w, inner)
+        if (inner.pos === 'absolute') return this.#calcPosAbsolute(x, w, inner)
         const { start, len, next } = this.#calcPosStatic(tmp, w, inner)
         tmp = next
         return { start, len }
@@ -228,7 +228,7 @@ class XCanvasWorker {
     const remainRate = (w - sumNum) / w
     if (remainRate < sumPer) {
       return innerArr.map(inner => {
-        if (inner.pos === 'absolute') return this.#calcPosAbsolute(tmp, w, inner)
+        if (inner.pos === 'absolute') return this.#calcPosAbsolute(x, w, inner)
         const { start, len, next } = this.#calcPosStatic(tmp, (w * remainRate) / sumPer, inner)
         tmp = next
         return { start, len }
@@ -245,7 +245,7 @@ class XCanvasWorker {
       if (inner.me === 'auto') mAutoCount++
     }
     return innerArr.map(inner => {
-      if (inner.pos === 'absolute') return this.#calcPosAbsolute(tmp, w, inner)
+      if (inner.pos === 'absolute') return this.#calcPosAbsolute(x, w, inner)
       // len auto
       if (lenAutoCount > 0) {
         const { start, len, next } = this.#calcPosStatic(tmp, w, inner, (w - sumNum - sumPer * w) / lenAutoCount)
