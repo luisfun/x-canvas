@@ -1,3 +1,4 @@
+import pkg from '../package.json' assert { type: 'json' }
 import type {
   CanvasElement,
   CanvasProps,
@@ -21,7 +22,7 @@ export class XCanvas {
    * @returns {XCanvas}
    */
   constructor(canvasElement: HTMLCanvasElement, workerDir: string, options?: Options) {
-    this.#worker = new Worker(`${workerDir}/x-canvas${options?.debugMode ? '' : '.min'}.js`)
+    this.#worker = new Worker(`${workerDir}/x-canvas@${pkg.version}${options?.debugMode ? '' : '.min'}.js`)
     this.#canvas = canvasElement.transferControlToOffscreen()
     this.#options = options
     //worker.onmessage = (event: MessageEvent) => {

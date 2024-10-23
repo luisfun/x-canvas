@@ -113,13 +113,15 @@ class XCanvasWorker {
     const pos = { x: 0, y: 0, z: 0, w: this.#canvas.width, h: this.#canvas.height }
     this.#structure = { pos, elem: root, inner: this.#recuStructure(pos, root) }
     // quick render
-    if (self.fonts.check(`${this.#fontSize}px ${this.#fontFamily}`)) this.#draw()
+    if (this.#isFontReady) this.#draw()
     // load font
     else
       this.#fontFace?.load().then(() => {
-        if (self.fonts.check(`${this.#fontSize}px ${this.#fontFamily}`)) this.#isFontReady = true
-        this.#structure = { pos, elem: root, inner: this.#recuStructure(pos, root) }
-        this.#draw()
+        if (self.fonts.check(`${this.#fontSize}px ${this.#fontFamily}`)) {
+          this.#isFontReady = true
+          this.#structure = { pos, elem: root, inner: this.#recuStructure(pos, root) }
+          this.#draw()
+        }
       })
     // load image
     this.#load()
@@ -331,7 +333,7 @@ class XCanvasWorker {
    */
 
   #draw(structure?: Structure, recursive?: boolean) {
-    if (!structure && this.#imageSrcList.length !== this.#imageMap.size) return
+    if (!structure && (this.#imageSrcList.length !== this.#imageMap.size || !this.#structure?.inner?.[0])) return
     const s = recursive ? structure : this.#structure
     if (!s) return
     if (typeof s.elem !== 'object' || !s.elem) return
