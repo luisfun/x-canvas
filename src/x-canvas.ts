@@ -86,6 +86,7 @@ class XCanvasWorker {
   #structure: Structure | undefined = undefined
   #imageMap = new Map<string, ImageBitmap | OffscreenCanvas>()
   #imageSrcList: string[] = [] // 重複回避用
+  #isFontReady = false
   constructor(canvas: OffscreenCanvas, ctx: OffscreenCanvasRenderingContext2D) {
     this.#canvas = canvas
     this.#ctx = ctx
@@ -97,6 +98,7 @@ class XCanvasWorker {
     if (options?.fontFace) {
       this.#fontFace = new FontFace(...fixFontFaceConstructor(options.fontFace))
       this.#fontFamily = `${options.fontFace[0]}, ${defaultFont}`
+      this.#isFontReady = false
       // @ts-expect-error
       self.fonts.add(this.#fontFace)
     }
@@ -115,6 +117,7 @@ class XCanvasWorker {
     // load font
     else
       this.#fontFace?.load().then(() => {
+        if (self.fonts.check(`${this.#fontSize}px ${this.#fontFamily}`)) this.#isFontReady = true
         this.#structure = { pos, elem: root, inner: this.#recuStructure(pos, root) }
         this.#draw()
       })
@@ -328,11 +331,11 @@ class XCanvasWorker {
    */
 
   #draw(structure?: Structure, recursive?: boolean) {
-    if (!recursive && this.#debugMode) console.log('Canvas Render')
     if (!structure && this.#imageSrcList.length !== this.#imageMap.size) return
     const s = recursive ? structure : this.#structure
     if (!s) return
     if (typeof s.elem !== 'object' || !s.elem) return
+    if (!recursive && this.#debugMode) console.log('Canvas Render', this.#structure)
     const h = s.elem.props?.overflow === 'hidden' ? { pos: s.pos, radius: s.elem.props.borderRadius } : undefined
     if (h) this.#ctxClipBox(h.pos, h.radius)
     const clipPath = s.elem.props?.clipPathLine ? { pos: s.pos, path: s.elem.props.clipPathLine } : undefined
@@ -354,7 +357,7 @@ class XCanvasWorker {
     const align = props?.textAlign || 'left'
     const x = align === 'left' ? pos.x : align === 'right' ? pos.x + pos.w : pos.x + pos.w / 2
     this.#ctx.fillStyle = props?.color || this.#fontColor
-    this.#ctx.font = `${this.#fixSize(props?.fontSize, this.#fontSize, this.#fontSize)}px ${this.#fontFamily}`
+    this.#ctxFont(props?.fontSize)
     this.#ctx.textAlign = align
     this.#ctx.textBaseline = 'middle'
     if (props?.opacity) this.#ctx.globalAlpha = props.opacity
@@ -485,7 +488,7 @@ class XCanvasWorker {
       }
       if (length && size.endsWith('%')) {
         const sizeNum = Number(size.slice(0, -1))
-        if (!Number.isNaN(sizeNum)) return sizeNum * length
+        if (!Number.isNaN(sizeNum)) return (sizeNum * length) / 100
       }
     }
     return defaultValue ?? ('auto' as T extends number ? number : number | 'auto')
@@ -493,16 +496,19 @@ class XCanvasWorker {
 
   #getTextWidth(text: unknown, fontSize?: SxSize | undefined) {
     if (typeof text !== 'string' && typeof text !== 'number') return undefined
-    const fontFamily = self.fonts.check(`${this.#fontSize}px ${this.#fontFamily}`) ? this.#fontFamily : defaultFont
-    this.#ctx.font = `${this.#fixSize(fontSize, this.#fontSize, this.#fontSize)}px ${fontFamily}`
+    this.#ctxFont(fontSize)
     return this.#ctx.measureText(text.toString()).width
+  }
+
+  #ctxFont(fontSize: SxSize | undefined) {
+    this.#ctx.font = `${this.#fixSize(fontSize, this.#fontSize, this.#fontSize)}px ${this.#isFontReady ? this.#fontFamily : defaultFont}`
   }
 }
 
 let xc: XCanvasWorker | undefined
 self.onmessage = (event: MessageEvent<RequestWorker>) => {
   const { canvas, options, root } = event.data
-  if (!xc) {
+  if (!xc && canvas) {
     const ctx = canvas.getContext('2d')
     if (ctx) xc ??= new XCanvasWorker(canvas, ctx)
     else new Error('web worker: OffscreenCanvas.getContext("2d")')

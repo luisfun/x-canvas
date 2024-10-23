@@ -9,7 +9,7 @@ export type Options = {
   debugMode?: boolean
 }
 
-export type RequestWorker = { canvas: OffscreenCanvas; options: Options | undefined; root: DivElement }
+export type RequestWorker = { canvas: OffscreenCanvas | undefined; options: Options | undefined; root: DivElement }
 
 export type SxSize = number | (string & {}) | 'auto'
 export type SxBorder = { width: number; color: string; offset?: number }

@@ -27,6 +27,14 @@ export class XCanvas {
     //worker.onmessage = (event: MessageEvent) => {
     //  console.log('Result from worker:', event.data)
     //}
+    this.#worker.postMessage(
+      {
+        canvas: this.#canvas,
+        options: this.#isOptionsPosted ? undefined : this.#options,
+        root: { type: 'div', props: {}, children: [] } as DivElement,
+      } as RequestWorker,
+      [this.#canvas],
+    )
   }
 
   /**
@@ -43,14 +51,10 @@ export class XCanvas {
    * @param {...XElement} children
    */
   render(props: DivProps, ...children: XElement[]) {
-    this.#worker.postMessage(
-      {
-        canvas: this.#canvas,
-        options: this.#isOptionsPosted ? undefined : this.#options,
-        root: { type: 'div', props, children } as DivElement,
-      } as RequestWorker,
-      [this.#canvas],
-    )
+    this.#worker.postMessage({
+      options: this.#isOptionsPosted ? undefined : this.#options,
+      root: { type: 'div', props, children } as DivElement,
+    } as RequestWorker)
     this.#isOptionsPosted = true
   }
 }

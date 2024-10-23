@@ -15,27 +15,21 @@ if (!destPath) {
   console.error('usage: worker-copy <path>')
   process.exit(1)
 }
-
-function copyFile(source, destination) {
-  const fileName = path.basename(source)
-  const destFile = path.join(destination, fileName)
-
-  fs.copyFileSync(source, destFile)
-  console.log(`copy: ${fileName}`)
-}
-
 try {
-  if (!fs.existsSync(destPath)) {
-    fs.mkdirSync(destPath, { recursive: true })
-  }
-
+  if (args.includes('--clean')) fs.unlinkSync(destPath)
+} catch (error) {
+  console.log('no delete')
+}
+try {
+  if (!fs.existsSync(destPath)) fs.mkdirSync(destPath, { recursive: true })
   for (const sourcePath of sourcePaths) {
     if (!fs.existsSync(sourcePath)) {
       console.error('Not found:', sourcePath)
     } else {
-      copyFile(sourcePath, destPath)
+      fs.copyFileSync(sourcePath, path.join(destPath, path.basename(sourcePath)))
     }
   }
+  console.log('worker files copied')
 } catch (error) {
   console.error(error.message)
   process.exit(1)
