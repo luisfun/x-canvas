@@ -154,7 +154,7 @@ class XCanvasWorker {
     const sxArr = elem.children.map(child => {
       if (typeof child !== 'object')
         return { z: 0, w: 'auto', h: 'auto', mt: 'auto', mr: 'auto', mb: 'auto', ml: 'auto', position: undefined }
-      const m = child.props?.m != null ? Number(child.props.m) : 'auto'
+      const m = this.#fixSize(child.props?.m, this.#fontSize)
       return {
         z: child.props?.z ?? 0,
         w: child.props?.w ?? this.#getTextWidth(child.children[0]) ?? 'auto',
