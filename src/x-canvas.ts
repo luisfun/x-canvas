@@ -157,7 +157,7 @@ class XCanvasWorker {
       const m = this.#fixSize(child.props?.m, this.#fontSize)
       return {
         z: child.props?.z ?? 0,
-        w: child.props?.w ?? this.#getTextWidth(child.children[0]) ?? 'auto',
+        w: child.props?.w ?? this.#getTextWidth(child.children[0], child.props.fontSize) ?? 'auto',
         h:
           child.props?.h ??
           (typeof child.children[0] === 'string' || typeof child.children[0] === 'number'
@@ -496,7 +496,7 @@ class XCanvasWorker {
     return defaultValue ?? ('auto' as T extends number ? number : number | 'auto')
   }
 
-  #getTextWidth(text: unknown, fontSize?: SxSize | undefined) {
+  #getTextWidth(text: unknown, fontSize: SxSize | undefined) {
     if (typeof text !== 'string' && typeof text !== 'number') return undefined
     this.#ctxFont(fontSize)
     return this.#ctx.measureText(text.toString()).width
