@@ -2,9 +2,9 @@ import type {
   CalcInner,
   CalcOuter,
   CalcUniInner,
-  CanvasProps,
   DivElement,
   DivProps,
+  ImgElement,
   ImgProps,
   Options,
   Position,
@@ -17,6 +17,14 @@ import type {
 
 const defaultFont = 'Helvetica Neue, Arial, Hiragino Kaku Gothic ProN, Hiragino Sans, Meiryo, sans-serif'
 
+const isNonElement = (elem: XElement) =>
+  typeof elem !== 'object' || elem instanceof ImageBitmap || elem instanceof OffscreenCanvas
+
+const fetchImage = (url: string) =>
+  fetch(self.location.origin + url)
+    .then(res => res.blob())
+    .then(blob => createImageBitmap(blob))
+
 const fixFontFaceConstructor = (
   parameters: ConstructorParameters<typeof FontFace>,
 ): ConstructorParameters<typeof FontFace> => {
@@ -25,12 +33,7 @@ const fixFontFaceConstructor = (
   return [family, source, descriptors]
 }
 
-const fetchImage = (url: string) =>
-  fetch(self.location.origin + url)
-    .then(res => res.blob())
-    .then(blob => createImageBitmap(blob))
-
-const drawImageArea = (image: ImageBitmap | OffscreenCanvas, pos: Position, props: ImgProps | CanvasProps) => {
+const drawImageArea = (image: ImageBitmap | OffscreenCanvas, pos: Position, props: ImgProps) => {
   const w = image.width
   const h = image.height
   const posRatio = pos.w / pos.h
@@ -132,8 +135,8 @@ class XCanvasWorker {
    */
 
   #recuStructure(pos: Position, elem: XElement) {
+    if (isNonElement(elem)) return undefined // end elem
     const posArr = this.#calcChildrenPos(pos, elem)
-    if (typeof elem !== 'object' || !posArr) return undefined // end elem
     const re: Structure[] = elem.children?.map((child, i) => ({
       pos: posArr[i],
       elem: child,
@@ -143,8 +146,7 @@ class XCanvasWorker {
     return re
   }
 
-  #calcChildrenPos(pos: Position, elem: XElement) {
-    if (typeof elem !== 'object') return undefined // end elem
+  #calcChildrenPos(pos: Position, elem: DivElement | ImgElement) {
     const px = this.#fixSize(elem.props.p, pos.w, 0)
     const py = this.#fixSize(elem.props.p, pos.h, 0)
     const pt = this.#fixSize(elem.props.pt, pos.h, py)
@@ -152,7 +154,7 @@ class XCanvasWorker {
     const pb = this.#fixSize(elem.props.pb, pos.h, py)
     const pl = this.#fixSize(elem.props.pl, pos.w, px)
     const sxArr = elem.children.map(child => {
-      if (typeof child !== 'object')
+      if (isNonElement(child))
         return { z: 0, w: 'auto', h: 'auto', mt: 'auto', mr: 'auto', mb: 'auto', ml: 'auto', position: undefined }
       const m = this.#fixSize(child.props?.m, this.#fontSize)
       return {
@@ -295,37 +297,22 @@ class XCanvasWorker {
   #load(structure?: Structure, recursive?: boolean) {
     const s = recursive ? structure : this.#structure
     if (!s) return
-    if (typeof s.elem !== 'object' || !s.elem) return
-    if (s.elem.type === 'img') this.#loadImage(s.elem.props.src)
+    if (isNonElement(s.elem)) return
+    if (s.elem.type === 'img') this.#loadImage(s.elem.children[0], s.elem.props.id)
     if (s.elem.props.backgroundImage) this.#loadImage(s.elem.props.backgroundImage)
-    if (s.elem.type === 'canvas')
-      this.#loadCanvas(s.elem.props.id || 'canvas', s.elem.props.func, s.pos, s.elem.props.refresh)
     for (const e of s.inner || []) this.#load(e, true)
   }
 
-  #loadImage(src: string) {
-    if (this.#imageSrcList.includes(src)) return
-    this.#imageSrcList.push(src)
-    fetchImage(src).then(image => {
-      this.#imageMap.set(src, image)
-      this.#draw()
-    })
-  }
-
-  #loadCanvas(id: string, func: (canvas: OffscreenCanvas) => Promise<void>, pos: Position, refresh = true) {
-    if (!refresh && this.#imageSrcList.includes(id)) return
-    if (!this.#imageSrcList.includes(id)) this.#imageSrcList.push(id)
-    let canvas = this.#imageMap.get(id)
-    if (canvas instanceof OffscreenCanvas) {
-      canvas.width = Math.round(pos.w)
-      canvas.height = Math.round(pos.h)
-    } else {
-      canvas = new OffscreenCanvas(Math.round(pos.w), Math.round(pos.h))
-    }
-    func(canvas).then(() => {
-      this.#imageMap.set(id, canvas)
-      this.#draw()
-    })
+  #loadImage(src: ImgElement['children'][number], id?: string | undefined) {
+    const index = id ?? (typeof src === 'string' ? src : 'image')
+    if (typeof src !== 'string') this.#imageMap.set(index, src)
+    if (this.#imageSrcList.includes(index)) return
+    this.#imageSrcList.push(index)
+    if (typeof src === 'string')
+      fetchImage(src).then(image => {
+        this.#imageMap.set(index, image)
+        this.#draw()
+      })
   }
 
   /*
@@ -336,15 +323,14 @@ class XCanvasWorker {
     if (!structure && (this.#imageSrcList.length !== this.#imageMap.size || !this.#structure?.inner?.[0])) return
     const s = recursive ? structure : this.#structure
     if (!s) return
-    if (typeof s.elem !== 'object' || !s.elem) return
+    if (isNonElement(s.elem)) return
     if (!recursive && this.#debugMode) console.log('Canvas Render', this.#structure)
     const h = s.elem.props?.overflow === 'hidden' ? { pos: s.pos, radius: s.elem.props.borderRadius } : undefined
     if (h) this.#ctxClipBox(h.pos, h.radius)
     const clipPath = s.elem.props?.clipPathLine ? { pos: s.pos, path: s.elem.props.clipPathLine } : undefined
     if (clipPath) this.#ctxClipPath(clipPath.pos, clipPath.path)
     if (s.elem.props) this.#drawBackground(s.pos, s.elem.props)
-    if (s.elem.type === 'img') this.#drawImage(s.pos, s.elem.props?.src || '', s.elem.props)
-    if (s.elem.type === 'canvas') this.#drawImage(s.pos, s.elem.props?.id || 'canvas', s.elem.props)
+    if (s.elem.type === 'img') this.#drawImage(s.pos, s.elem.children[0], s.elem.props)
     if (s.elem.type === 'div') {
       if (typeof s.elem.children[0] === 'string' || typeof s.elem.children[0] === 'number') {
         this.#drawText(s.pos, s.elem.children[0], s.elem.props)
@@ -376,8 +362,9 @@ class XCanvasWorker {
     if (props?.opacity) this.#ctx.globalAlpha = 1
   }
 
-  #drawImage(pos: Position, src: string, props: ImgProps | CanvasProps) {
-    const image = this.#imageMap.get(src)
+  #drawImage(pos: Position, src: ImgElement['children'][number], props: ImgProps) {
+    const index = props.id ?? (typeof src === 'string' ? src : 'image')
+    const image = this.#imageMap.get(index)
     if (!image) return // ts: not loading
     if (props.opacity) this.#ctx.globalAlpha = props.opacity
     if (props.shadow) {
@@ -393,7 +380,7 @@ class XCanvasWorker {
     if (props.opacity) this.#ctx.globalAlpha = 1
   }
 
-  #drawBackground(pos: Position, props: DivProps | ImgProps | CanvasProps) {
+  #drawBackground(pos: Position, props: DivProps | ImgProps) {
     if (props.backgroundColor) {
       this.#ctx.fillStyle = props.backgroundColor
       this.#ctx.fillRect(pos.x, pos.y, pos.w, pos.h)
