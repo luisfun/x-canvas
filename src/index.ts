@@ -112,7 +112,7 @@ export const fetchImage = (url: string) =>
  * @param {number} threshold 差分を適用する際のしきい値
  */
 export const unsharpMask = (canvas: OffscreenCanvas, amount: number, radius: number, threshold: number) => {
-  const ctx = canvas.getContext('2d')
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
   if (!ctx) return
   const width = canvas.width
   const height = canvas.height
