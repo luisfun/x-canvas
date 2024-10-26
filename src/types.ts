@@ -42,13 +42,14 @@ type Props = {
   shadow?: { size: number; color?: string; for?: number } // img, text only
   clipPathLine?: SxSize[]
   opacity?: number // 0-1 img, text
+  objectFit?: 'contain' | 'cover' // imgタグ と bgImage要素
 }
 export type DivProps = Props & {
   textAlign?: 'left' | 'right' | 'center'
 }
 export type ImgProps = Props & {
-  objectFit?: 'contain' | 'cover' // imgタグ と bgImage要素
   id?: string // 画像の識別ID
+  unsharpMask?: [amount: number, radius: number, threshold: number]
 }
 
 export type DivElement = {
@@ -59,9 +60,9 @@ export type DivElement = {
 export type ImgElement = {
   type: 'img'
   props: ImgProps
-  children: (string | OffscreenCanvas | ImageBitmap)[]
+  children: (string | ImageBitmap)[]
 }
-export type XElement = DivElement | ImgElement | OffscreenCanvas | ImageBitmap | string | number | undefined
+export type XElement = DivElement | ImgElement | ImageBitmap | string | number | undefined
 
 export type Position = {
   x: number

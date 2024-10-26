@@ -17,8 +17,7 @@ import type {
 
 const defaultFont = 'Helvetica Neue, Arial, Hiragino Kaku Gothic ProN, Hiragino Sans, Meiryo, sans-serif'
 
-const isNonElement = (elem: XElement) =>
-  typeof elem !== 'object' || elem instanceof ImageBitmap || elem instanceof OffscreenCanvas
+const isNonElement = (elem: XElement) => typeof elem !== 'object' || elem instanceof ImageBitmap
 
 const fetchImage = (url: string) =>
   fetch(self.location.origin + url)
@@ -61,6 +60,109 @@ const drawImageArea = (image: ImageBitmap | OffscreenCanvas, pos: Position, prop
 const per2num = (per: unknown) =>
   typeof per === 'string' && per.at(-1) === '%' ? Number(per.slice(0, -1)) / 100 : undefined
 
+/**
+ * @param {OffscreenCanvas} canvas
+ * @param {number} amount シャープ化の強度
+ * @param {number} radius ぼかしの強度
+ * @param {number} threshold 差分を適用する際のしきい値
+ */
+const unsharpMask = (canvas: OffscreenCanvas, amount: number, radius: number, threshold: number) => {
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+  const width = canvas.width
+  const height = canvas.height
+  const imageData = ctx.getImageData(0, 0, width, height)
+  const originalData = new ImageData(new Uint8ClampedArray(imageData.data), width, height)
+  const blurredData = new ImageData(new Uint8ClampedArray(imageData.data), width, height)
+
+  // ガウスぼかしを適用
+  gaussianBlur(blurredData, radius)
+
+  const originalPixels = originalData.data
+  const blurredPixels = blurredData.data
+
+  for (let i = 0; i < originalPixels.length; i += 4) {
+    for (let j = 0; j < 3; j++) {
+      // RGBのみ処理
+      const diff = originalPixels[i + j] - blurredPixels[i + j]
+      if (Math.abs(diff) > threshold) {
+        originalPixels[i + j] = Math.min(Math.max(originalPixels[i + j] + diff * amount, 0), 255)
+      }
+    }
+  }
+
+  ctx.putImageData(originalData, 0, 0)
+}
+
+const gaussianBlur = (imageData: ImageData, radius: number) => {
+  const width = imageData.width
+  const height = imageData.height
+  const pixels = imageData.data
+  const tmpPixels = new Uint8ClampedArray(pixels)
+
+  // 標準偏差を計算
+  const sigma = radius / 3
+  const twoSigmaSquare = 2 * sigma * sigma
+  const piTwoSigmaSquare = Math.PI * twoSigmaSquare
+
+  // ガウス関数の重みを計算
+  const weights: number[] = []
+  let weightSum = 0
+  for (let i = -radius; i <= radius; i++) {
+    const weight = Math.exp(-(i * i) / twoSigmaSquare) / piTwoSigmaSquare
+    weights.push(weight)
+    weightSum += weight
+  }
+
+  // 重みを正規化
+  for (let i = 0; i < weights.length; i++) {
+    weights[i] /= weightSum
+  }
+
+  // 水平方向のぼかし
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      let r = 0
+      let g = 0
+      let b = 0
+      for (let i = -radius; i <= radius; i++) {
+        const xi = Math.min(Math.max(x + i, 0), width - 1)
+        const index = (y * width + xi) * 4
+        const weight = weights[i + radius]
+        r += tmpPixels[index] * weight
+        g += tmpPixels[index + 1] * weight
+        b += tmpPixels[index + 2] * weight
+      }
+      const index = (y * width + x) * 4
+      pixels[index] = r
+      pixels[index + 1] = g
+      pixels[index + 2] = b
+    }
+  }
+
+  // 垂直方向のぼかし
+  tmpPixels.set(pixels)
+  for (let x = 0; x < width; x++) {
+    for (let y = 0; y < height; y++) {
+      let r = 0
+      let g = 0
+      let b = 0
+      for (let i = -radius; i <= radius; i++) {
+        const yi = Math.min(Math.max(y + i, 0), height - 1)
+        const index = (yi * width + x) * 4
+        const weight = weights[i + radius]
+        r += tmpPixels[index] * weight
+        g += tmpPixels[index + 1] * weight
+        b += tmpPixels[index + 2] * weight
+      }
+      const index = (y * width + x) * 4
+      pixels[index] = r
+      pixels[index + 1] = g
+      pixels[index + 2] = b
+    }
+  }
+}
+
 /*
  * render
  * ├ #recuStructure ↻
@@ -87,7 +189,7 @@ class XCanvasWorker {
   #debugMode: Options['debugMode']
   //#renderDelay: number | undefined
   #structure: Structure | undefined = undefined
-  #imageMap = new Map<string, ImageBitmap | OffscreenCanvas>()
+  #imageMap = new Map<string, ImageBitmap>()
   #imageSrcList: string[] = [] // 重複回避用
   #isFontReady = false
   constructor(canvas: OffscreenCanvas, ctx: OffscreenCanvasRenderingContext2D) {
@@ -366,8 +468,16 @@ class XCanvasWorker {
 
   #drawImage(pos: Position, src: ImgElement['children'][number], props: ImgProps) {
     const index = props.id ?? (typeof src === 'string' ? src : 'image')
-    const image = this.#imageMap.get(index)
+    let image: ImageBitmap | OffscreenCanvas | undefined = this.#imageMap.get(index)
     if (!image) return // ts: not loading
+    if (props.unsharpMask) {
+      const canvas = new OffscreenCanvas(pos.w, pos.h)
+      const ctx = canvas.getContext('2d')
+      const [, , sw, sh, dx, dy, dw, dh] = drawImageArea(image, pos, props)
+      ctx?.drawImage(image, 0, 0, sw, sh, dx - pos.x, dy - pos.y, dw, dh)
+      unsharpMask(canvas, ...props.unsharpMask)
+      image = canvas
+    }
     if (props.opacity) this.#ctx.globalAlpha = props.opacity
     if (props.shadow) {
       this.#ctx.shadowBlur = props.shadow.size
