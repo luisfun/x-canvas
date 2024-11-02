@@ -8,8 +8,8 @@ const args = process.argv.slice(2)
 const destPath = args[0]
 
 const sourcePaths = [
-  './node_modules/@luisfun/x-canvas/dist/x-canvas.js',
-  './node_modules/@luisfun/x-canvas/dist/x-canvas.min.js',
+  './node_modules/@luisfun/x-canvas/dist/worker.js',
+  './node_modules/@luisfun/x-canvas/dist/worker.min.js',
 ]
 
 if (!destPath) {
@@ -29,7 +29,7 @@ try {
     } else {
       fs.copyFileSync(
         sourcePath,
-        path.join(destPath, path.basename(sourcePath).replace('x-canvas', `x-canvas@${pkg.version}`)),
+        path.join(destPath, path.basename(sourcePath).replace('worker', `x-canvas@${pkg.version}`)),
       )
     }
   }
