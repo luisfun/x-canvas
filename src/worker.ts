@@ -29,6 +29,7 @@ const fixFontFaceConstructor = (
 ): ConstructorParameters<typeof FontFace> => {
   let [family, source, descriptors] = parameters
   if (typeof source === 'string' && !source.startsWith('url(')) source = `url(${self.location.origin + source})`
+  if (!descriptors) descriptors = { display: 'swap' }
   return [family, source, descriptors]
 }
 
