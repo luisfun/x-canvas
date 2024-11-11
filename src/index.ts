@@ -11,6 +11,7 @@ export class XCanvas {
   #transfer: Transferable[] = []
   /**
    * @param {HTMLCanvasElement} canvasElement
+   * @param {string} workerDir
    * @param {Options} options
    * @returns {XCanvas}
    */
