@@ -49,6 +49,8 @@ export type DivProps = Props & {
 }
 export type ImgProps = Props & {
   id?: string // 画像の識別ID
+  clipImgRect?: [SxSize, SxSize, SxSize, SxSize]
+  opacityGradient?: ['to right' | 'to bottom', ...[SxSize, 0 | 1][]]
   unsharpMask?: [amount: number, radius: number, threshold: number]
 }
 
@@ -80,3 +82,5 @@ export type Structure = {
 export type CalcOuter = Position & { pt: number; pr: number; pb: number; pl: number }
 export type CalcInner = Required<Pick<Props, 'z' | 'w' | 'h' | 'mt' | 'mr' | 'mb' | 'ml'>> & Pick<Props, 'position'>
 export type CalcUniInner = { len: SxSize; ms: SxSize; me: SxSize; pos: 'absolute' | undefined }
+
+export type FirstElement<T extends unknown[]> = T extends [infer F, ...unknown[]] ? F : never

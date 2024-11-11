@@ -4,6 +4,7 @@ import type {
   CalcUniInner,
   DivElement,
   DivProps,
+  FirstElement,
   ImgElement,
   ImgProps,
   Options,
@@ -33,9 +34,14 @@ const fixFontFaceConstructor = (
   return [family, source, descriptors]
 }
 
-const drawImageArea = (image: ImageBitmap | OffscreenCanvas, pos: Position, props: ImgProps) => {
-  const w = image.width
-  const h = image.height
+const drawImageArea = (
+  image: ImageBitmap | OffscreenCanvas,
+  pos: Position,
+  props: ImgProps,
+  crip?: [number, number, number, number],
+) => {
+  const w = image.width - (crip ? crip[1] + crip[3] : 0)
+  const h = image.height - (crip ? crip[0] + crip[2] : 0)
   const posRatio = pos.w / pos.h
   const imgRatio = w / h
   let fit: 'x' | 'y' | undefined = undefined
@@ -48,14 +54,17 @@ const drawImageArea = (image: ImageBitmap | OffscreenCanvas, pos: Position, prop
     if (posRatio < imgRatio) fit = 'x'
     if (imgRatio < posRatio) fit = 'y'
   }
+  const sx = crip?.[3] ?? 0
+  const sy = crip?.[0] ?? 0
+  if (crip) console.log(sx, sy, w, h)
   if (fit === 'x') {
     const img = { w: pos.w, h: (h * pos.w) / w }
     const posY = pos.y + pos.h / 2 - img.h / 2
-    return [0, 0, w, h, pos.x, posY, img.w, img.h] as const
+    return [sx, sy, w, h, pos.x, posY, img.w, img.h] as const
   }
   const img = { w: (w * pos.h) / h, h: pos.h }
   const posX = pos.x + pos.w / 2 - img.w / 2
-  return [0, 0, w, h, posX, pos.y, img.w, img.h] as const
+  return [sx, sy, w, h, posX, pos.y, img.w, img.h] as const
 }
 
 const per2num = (per: unknown) =>
@@ -162,6 +171,48 @@ const gaussianBlur = (imageData: ImageData, radius: number) => {
       pixels[index + 2] = b
     }
   }
+}
+
+const opacityGradient = (
+  canvas: OffscreenCanvas,
+  direction: FirstElement<Required<ImgProps>['opacityGradient']>,
+  params: [number, 0 | 1][],
+) => {
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  if (!ctx) return
+
+  // 元の画像データを保存
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+  const data = imageData.data
+
+  for (let i = 1; i < params.length; i++) {
+    const start = params[i - 1][0]
+    const end = params[i][0]
+    const startOpacity = params[i - 1][1]
+    const endOpacity = params[i][1]
+
+    if (startOpacity === 1 && endOpacity === 1) continue
+
+    const isHorizontal = direction === 'to right'
+    const length = isHorizontal ? canvas.height : canvas.width
+
+    for (let j = start; j < end; j++) {
+      const progress = (j - start) / (end - start)
+      const opacity = startOpacity + (endOpacity - startOpacity) * progress
+
+      for (let k = 0; k < length; k++) {
+        const x = isHorizontal ? j : k
+        const y = isHorizontal ? k : j
+        const index = (y * canvas.width + x) * 4
+
+        // アルファ値のみを変更
+        data[index + 3] = Math.round(data[index + 3] * opacity)
+      }
+    }
+  }
+
+  // 修正した画像データを描画
+  ctx.putImageData(imageData, 0, 0)
 }
 
 /*
@@ -471,12 +522,30 @@ class XCanvasWorker {
     const index = props.id ?? (typeof src === 'string' ? src : 'image')
     let image: ImageBitmap | OffscreenCanvas | undefined = this.#imageMap.get(index)
     if (!image) return // ts: not loading
-    if (props.unsharpMask) {
+    if (props.clipImgRect || props.opacityGradient || props.unsharpMask) {
       const canvas = new OffscreenCanvas(pos.w, pos.h)
       const ctx = canvas.getContext('2d')
-      const [, , sw, sh, dx, dy, dw, dh] = drawImageArea(image, pos, props)
-      ctx?.drawImage(image, 0, 0, sw, sh, dx - pos.x, dy - pos.y, dw, dh)
-      unsharpMask(canvas, ...props.unsharpMask)
+      ctx?.drawImage(
+        image,
+        ...drawImageArea(
+          image,
+          { ...pos, x: 0, y: 0 },
+          props,
+          // @ts-expect-error
+          props?.clipImgRect?.map((e, i) => this.#fixSize(e, i % 2 === 0 ? image?.height : image?.width, 0)),
+        ),
+      )
+      if (props.opacityGradient) {
+        const direction = props.opacityGradient[0]
+        const rawParams = props.opacityGradient.slice(1) as Required<ImgProps>['opacityGradient'][1][]
+        let params: [number, 0 | 1][] = []
+        if (direction === 'to right')
+          params = rawParams.map(e => [Math.round(this.#fixSize(e[0], canvas.width, 0)), e[1]])
+        else if (direction === 'to bottom')
+          params = rawParams.map(e => [Math.round(this.#fixSize(e[0], canvas.height, 0)), e[1]])
+        opacityGradient(canvas, direction, params)
+      }
+      if (props.unsharpMask) unsharpMask(canvas, ...props.unsharpMask)
       image = canvas
     }
     if (props.opacity) this.#ctx.globalAlpha = props.opacity
