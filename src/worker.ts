@@ -240,7 +240,7 @@ class XCanvasWorker {
   #debugMode: Options['debugMode']
   //#renderDelay: number | undefined
   #structure: Structure | undefined = undefined
-  #imageMap = new Map<string, ImageBitmap>()
+  #imageMap = new Map<string, ImageBitmap | undefined>()
   #imageSrcList: string[] = [] // 重複回避用
   #isFontReady = false
   constructor(canvas: OffscreenCanvas, ctx: OffscreenCanvasRenderingContext2D) {
@@ -464,10 +464,16 @@ class XCanvasWorker {
     if (this.#imageSrcList.includes(index)) return
     this.#imageSrcList.push(index)
     if (typeof src === 'string')
-      fetchImage(src).then(image => {
-        this.#imageMap.set(index, image)
-        this.#draw()
-      })
+      fetchImage(src)
+        .then(image => {
+          this.#imageMap.set(index, image)
+          this.#draw()
+        })
+        .catch(() => {
+          console.error('web worker: fetch image')
+          this.#imageMap.set(index, undefined)
+          this.#draw()
+        })
   }
 
   /*
