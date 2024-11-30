@@ -269,9 +269,11 @@ class XCanvasWorker {
     const pos = { x: 0, y: 0, z: 0, w: this.#canvas.width, h: this.#canvas.height }
     this.#structure = { pos, elem: root, inner: this.#recuStructure(pos, root) }
     // quick render
-    if (this.#isFontReady) this.#draw()
+    this.#draw()
+    // load image
+    this.#load()
     // load font
-    else
+    if (!this.#isFontReady)
       this.#fontFace?.load().then(() => {
         if (self.fonts.check(`${this.#fontSize}px ${this.#fontFamily}`)) {
           this.#isFontReady = true
@@ -279,8 +281,6 @@ class XCanvasWorker {
           this.#draw()
         }
       })
-    // load image
-    this.#load()
   }
 
   /*
