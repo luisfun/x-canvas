@@ -2,7 +2,7 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
-import pkg from '../package.json' assert { type: 'json' }
+import pkg from '../package.json' with { type: 'json' }
 
 const args = process.argv.slice(2)
 const destPath = args[0]
